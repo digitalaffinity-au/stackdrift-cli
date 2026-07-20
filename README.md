@@ -7,7 +7,7 @@ dates, and security advisories for you.
 
 ## Install
 
-### Linux
+### Linux/MacOS
 
 ```
 curl -fsSL https://raw.githubusercontent.com/digitalaffinity-au/stackdrift-cli/main/scripts/install.sh | bash
