@@ -7,6 +7,21 @@ type Technology struct {
 	Source   string
 }
 
+const (
+	SourceOsRelease = "/etc/os-release"
+	SourceHostKern  = "host kernel"
+	SourceHost      = "host"
+)
+
+func IsHostSource(source string) bool {
+	switch source {
+	case SourceOsRelease, SourceHostKern, SourceHost:
+		return true
+	default:
+		return false
+	}
+}
+
 type Manifest struct {
 	Ecosystem string
 	Path      string

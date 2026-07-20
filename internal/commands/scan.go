@@ -46,8 +46,10 @@ func Scan(args []string) error {
 
 	var chosenTechs, chosenManifests []ui.Item
 	if assumeYes {
-		chosenTechs = ui.SelectAll(techItems)
-		chosenManifests = ui.SelectAll(manifestItems)
+		// Accept the recommended defaults without prompting. Host-machine
+		// detections stay off, so a project scan never adds the dev machine's OS.
+		chosenTechs = techItems
+		chosenManifests = manifestItems
 	} else {
 		chosenTechs = ui.ToggleList("Technologies detected:", techItems)
 		chosenManifests = ui.ToggleList("Dependency manifests detected:", manifestItems)

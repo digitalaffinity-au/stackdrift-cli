@@ -12,11 +12,6 @@ type Item struct {
 	Selected bool
 }
 
-func SelectAll(items []Item) []Item {
-	setAll(items, true)
-	return items
-}
-
 func ToggleList(title string, items []Item) []Item {
 	if len(items) == 0 {
 		return items

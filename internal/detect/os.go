@@ -26,7 +26,7 @@ func scanHost(result *Result) {
 			result.Technologies = append(result.Technologies, Technology{
 				Name:     "Windows",
 				Category: "OperatingSystem",
-				Source:   "host",
+				Source:   SourceHost,
 			})
 		}
 		return
@@ -62,7 +62,7 @@ func detectOsRelease(result *Result, path string) {
 		Name:     name,
 		Version:  fields["VERSION_ID"],
 		Category: "OperatingSystem",
-		Source:   "/etc/os-release",
+		Source:   SourceOsRelease,
 	})
 }
 
@@ -79,6 +79,6 @@ func detectKernel(result *Result) {
 		Name:     "Linux Kernel",
 		Version:  match,
 		Category: "OperatingSystem",
-		Source:   "host kernel",
+		Source:   SourceHostKern,
 	})
 }

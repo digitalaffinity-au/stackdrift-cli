@@ -18,7 +18,13 @@ func technologyItems(result *detect.Result, existing *config.ProjectConfig) []ui
 		if t.Version != "" {
 			label += " " + t.Version
 		}
-		items[i] = ui.Item{Label: label, Hint: t.Source, Selected: !tracked[techKey(t.Name, t.Version)]}
+		// Host-machine detections describe where the CLI runs, not the project,
+		// so they are offered but not selected by default.
+		items[i] = ui.Item{
+			Label:    label,
+			Hint:     t.Source,
+			Selected: !tracked[techKey(t.Name, t.Version)] && !detect.IsHostSource(t.Source),
+		}
 	}
 	return items
 }

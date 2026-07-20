@@ -254,3 +254,12 @@ func TestScan_DebianImageMajorTag_UsesMajor(t *testing.T) {
 		t.Fatalf("expected 12, got %q", tech.Version)
 	}
 }
+
+func TestIsHostSource(t *testing.T) {
+	if !IsHostSource(SourceOsRelease) || !IsHostSource(SourceHostKern) || !IsHostSource(SourceHost) {
+		t.Fatal("expected host sources to be recognised")
+	}
+	if IsHostSource("csproj TargetFramework") || IsHostSource("Dockerfile") {
+		t.Fatal("project sources must not count as host")
+	}
+}
