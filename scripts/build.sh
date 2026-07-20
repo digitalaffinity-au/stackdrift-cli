@@ -2,19 +2,18 @@
 set -euo pipefail
 
 # Builds release binaries into dist/ for linux, windows, and macOS on amd64 and
-# arm64. The server URL is baked in at compile time. Pass a version as the first
-# argument.
+# arm64. All binaries point at https://stackdrift.net; the only way to target a
+# different server is the STACKDRIFT_URL environment variable at runtime. Pass a
+# version as the first argument.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${1:-dev}"
-SERVER_URL="${STACKDRIFT_BUILD_URL:-https://stackdrift.net}"
-MODULE="github.com/digitalaffinity-au/stackdrift-cli"
 
-LDFLAGS="-s -w -X main.version=${VERSION} -X ${MODULE}/internal/config.DefaultBaseURL=${SERVER_URL}"
+LDFLAGS="-s -w -X main.version=${VERSION}"
 
 mkdir -p "$ROOT/dist"
 
-echo "Building stackdrift ${VERSION} for server ${SERVER_URL}"
+echo "Building stackdrift ${VERSION} (server: https://stackdrift.net, override with STACKDRIFT_URL)"
 
 build() {
   local goos="$1" goarch="$2" ext="$3"

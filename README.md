@@ -118,21 +118,26 @@ stackdrift version   print the CLI version
 
 ## Pointing at a different server
 
-Release builds talk to the public StackDrift server. To use a different server,
-set an environment variable:
+The CLI always talks to the public StackDrift server at https://stackdrift.net.
+The only way to point it at a different server is the `STACKDRIFT_URL`
+environment variable at runtime:
 
 ```
-STACKDRIFT_URL=http://192.168.1.47 stackdrift login
+STACKDRIFT_URL=http://localhost:5000 stackdrift login
 ```
 
 ## Building from source
 
-You need Go installed. To build release binaries for Linux and Windows into
-`dist/`:
+You need Go installed. To build release binaries for Linux, Windows, and macOS
+(amd64 and arm64) into `dist/`:
 
 ```
-STACKDRIFT_BUILD_URL=https://stackdrift.net scripts/build.sh 0.1.0
+scripts/build.sh 0.1.0
 ```
+
+Every binary targets https://stackdrift.net. There is no build-time server
+option; use the `STACKDRIFT_URL` environment variable to point at another
+server at runtime.
 
 To run the tests:
 

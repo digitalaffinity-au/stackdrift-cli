@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-var DefaultBaseURL = "https://stackdrift.net"
+const DefaultBaseURL = "https://stackdrift.net"
 
 func BaseURL() string {
 	if fromEnv := strings.TrimSpace(os.Getenv("STACKDRIFT_URL")); fromEnv != "" {
