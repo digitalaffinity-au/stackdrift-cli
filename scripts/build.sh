@@ -7,7 +7,14 @@ set -euo pipefail
 # version as the first argument.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-dev}"
+VERSION="${1:-}"
+if [ -z "$VERSION" ]; then
+  if [ -f "$ROOT/VERSION" ]; then
+    VERSION="$(tr -d ' \t\n\r' < "$ROOT/VERSION")"
+  else
+    VERSION="dev"
+  fi
+fi
 
 LDFLAGS="-s -w -X main.version=${VERSION}"
 

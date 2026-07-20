@@ -13,8 +13,10 @@ dates, and security advisories for you.
 curl -fsSL https://raw.githubusercontent.com/digitalaffinity-au/stackdrift-cli/main/scripts/install.sh | bash
 ```
 
-This downloads the binary to `~/.local/bin/stackdrift`. If that directory is not
-on your PATH, the script tells you how to add it.
+This installs the binary into a directory that is already on your PATH, such as
+`~/.local/bin` or `/usr/local/bin`, so you can run `stackdrift` from anywhere
+without changing any environment variables. Set `STACKDRIFT_INSTALL_DIR` to
+force a specific directory.
 
 The Linux script also works on macOS. It picks the right binary for Intel or
 Apple Silicon automatically.
@@ -27,8 +29,9 @@ Open PowerShell and run:
 irm https://raw.githubusercontent.com/digitalaffinity-au/stackdrift-cli/main/scripts/install.ps1 | iex
 ```
 
-This downloads the binary to `%LOCALAPPDATA%\StackDrift` and adds it to your
-PATH.
+This installs the binary into `%LOCALAPPDATA%\Microsoft\WindowsApps`, which is
+already on your PATH, so you can run `stackdrift` from anywhere without changing
+any environment variables.
 
 ## Updating
 

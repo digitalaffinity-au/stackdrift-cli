@@ -1,3 +1,6 @@
 .stackdrift
 credentials.json
 rules.md
+gh-token
+*.token
+.env

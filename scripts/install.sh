@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Installs the StackDrift CLI on Linux. Downloads the release binary and puts it
-# on your PATH. Run with:
+# Installs the StackDrift CLI on Linux and macOS. Downloads the release binary
+# and places it in a directory that is already on your PATH, so no environment
+# variable changes are needed. Run with:
 #   curl -fsSL https://raw.githubusercontent.com/digitalaffinity-au/stackdrift-cli/main/scripts/install.sh | bash
 
 REPO="digitalaffinity-au/stackdrift-cli"
-INSTALL_DIR="${STACKDRIFT_INSTALL_DIR:-$HOME/.local/bin}"
-TARGET="$INSTALL_DIR/stackdrift"
 
 echo "Installing the StackDrift CLI"
 
@@ -24,19 +23,76 @@ case "$(uname -m)" in
 esac
 
 BINARY="stackdrift-${OS}-${ARCH}"
-
-mkdir -p "$INSTALL_DIR"
-
 URL="https://github.com/${REPO}/releases/latest/download/${BINARY}"
+
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+
 echo "Downloading ${URL}"
-curl -fsSL "$URL" -o "$TARGET"
-chmod +x "$TARGET"
+curl -fsSL "$URL" -o "$TMP"
+chmod +x "$TMP"
+
+on_path() {
+  case ":$PATH:" in
+    *":$1:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+TARGET=""
+USE_SUDO=""
+
+if [ -n "${STACKDRIFT_INSTALL_DIR:-}" ]; then
+  mkdir -p "$STACKDRIFT_INSTALL_DIR"
+  TARGET="$STACKDRIFT_INSTALL_DIR/stackdrift"
+else
+  for dir in "$HOME/.local/bin" "$HOME/bin" "/opt/homebrew/bin" "/usr/local/bin"; do
+    if on_path "$dir"; then
+      mkdir -p "$dir" 2>/dev/null || true
+      if [ -w "$dir" ]; then TARGET="$dir/stackdrift"; break; fi
+    fi
+  done
+
+  if [ -z "$TARGET" ]; then
+    saved_ifs="$IFS"
+    set -f
+    IFS=":"
+    set -- $PATH
+    set +f
+    IFS="$saved_ifs"
+    for dir in "$@"; do
+      [ -n "$dir" ] || continue
+      if [ -d "$dir" ] && [ -w "$dir" ]; then TARGET="$dir/stackdrift"; break; fi
+    done
+  fi
+
+  if [ -z "$TARGET" ] && on_path "/usr/local/bin" && command -v sudo >/dev/null 2>&1; then
+    TARGET="/usr/local/bin/stackdrift"
+    USE_SUDO="yes"
+  fi
+
+  if [ -z "$TARGET" ]; then
+    mkdir -p "$HOME/.local/bin"
+    TARGET="$HOME/.local/bin/stackdrift"
+  fi
+fi
+
+if [ -n "$USE_SUDO" ]; then
+  echo "Installing to $TARGET (needs sudo)"
+  sudo install -m 0755 "$TMP" "$TARGET"
+else
+  mkdir -p "$(dirname "$TARGET")"
+  install -m 0755 "$TMP" "$TARGET"
+fi
 
 echo "Installed to ${TARGET}"
 
-if ! command -v stackdrift >/dev/null 2>&1; then
+INSTALL_DIR="$(dirname "$TARGET")"
+if on_path "$INSTALL_DIR"; then
+  echo "That directory is already on your PATH."
+else
   echo
-  echo "Add this directory to your PATH, then open a new terminal:"
+  echo "That directory is not on your PATH. Add it, then open a new terminal:"
   echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
 fi
 
