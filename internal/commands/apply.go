@@ -29,15 +29,25 @@ func technologyItems(result *detect.Result, existing *config.ProjectConfig) []ui
 	return items
 }
 
-func manifestItems(result *detect.Result, existing *config.ProjectConfig) []ui.Item {
-	tracked := trackedManifests(existing)
-	items := make([]ui.Item, len(result.Manifests))
-	for i, m := range result.Manifests {
-		key := manifestKey(m.Ecosystem, m.FileName)
+func primaryManifests(result *detect.Result) []detect.Manifest {
+	var primaries []detect.Manifest
+	for _, m := range result.Manifests {
+		if m.Primary {
+			primaries = append(primaries, m)
+		}
+	}
+	return primaries
+}
+
+func manifestItems(scanDir string, primaries []detect.Manifest, existing *config.ProjectConfig) []ui.Item {
+	tracked := trackedGroupNames(existing)
+	items := make([]ui.Item, len(primaries))
+	for i, m := range primaries {
+		name := groupNameFor(scanDir, m)
 		items[i] = ui.Item{
-			Label:    m.FileName + " (" + ecosystemLabel(m.Ecosystem) + ")",
-			Hint:     m.Path,
-			Selected: !tracked[key],
+			Label:    name + " (" + ecosystemLabel(m.Ecosystem) + ")",
+			Hint:     manifestDisplay(scanDir, m.Path),
+			Selected: !tracked[name],
 		}
 	}
 	return items
@@ -77,32 +87,31 @@ func applyTechnologies(client *api.Client, projectID int, detected []detect.Tech
 	return nil
 }
 
-func applyManifests(client *api.Client, projectID int, dir string, detected []detect.Manifest, chosen []ui.Item, cfg *config.ProjectConfig, save func() error) error {
-	tracked := trackedManifests(cfg)
+func applyManifests(client *api.Client, projectID int, dir string, primaries, all []detect.Manifest, chosen []ui.Item, cfg *config.ProjectConfig, save func() error) error {
+	tracked := trackedGroupNames(cfg)
 
-	byEcosystem := map[string][]detect.Manifest{}
 	for i, item := range chosen {
 		if !item.Selected {
 			continue
 		}
-		m := detected[i]
-		if tracked[manifestKey(m.Ecosystem, m.FileName)] {
+		primary := primaries[i]
+		groupName := groupNameFor(dir, primary)
+		if tracked[groupName] {
 			continue
 		}
-		byEcosystem[m.Ecosystem] = append(byEcosystem[m.Ecosystem], m)
-	}
 
-	for ecosystem, manifests := range byEcosystem {
-		files := make([]api.ManifestFile, len(manifests))
-		names := make([]string, len(manifests))
-		for i, m := range manifests {
-			files[i] = api.ManifestFile{FileName: m.FileName, Content: m.Content}
-			names[i] = manifestDisplay(dir, m.Path)
+		// The lock and central-version files pin the primary manifest's
+		// versions, so they are always uploaded alongside it.
+		bundle := append([]detect.Manifest{primary}, supportingFor(primary, all)...)
+		files := make([]api.ManifestFile, len(bundle))
+		names := make([]string, len(bundle))
+		for j, m := range bundle {
+			files[j] = api.ManifestFile{FileName: m.FileName, Content: m.Content}
+			names[j] = manifestDisplay(dir, m.Path)
 		}
 
-		groupName := defaultGroupName(dir, ecosystem)
 		_, err := client.UploadManifests(projectID, api.UploadManifestsRequest{
-			Ecosystem: ecosystem,
+			Ecosystem: primary.Ecosystem,
 			GroupName: groupName,
 			Files:     files,
 		})
@@ -112,32 +121,58 @@ func applyManifests(client *api.Client, projectID int, dir string, detected []de
 
 		cfg.DependencyGrp = append(cfg.DependencyGrp, config.TrackedDependencyGroup{
 			Name:      groupName,
-			Ecosystem: ecosystem,
+			Ecosystem: primary.Ecosystem,
 			Manifests: names,
 		})
+		tracked[groupName] = true
 		if err := save(); err != nil {
 			return err
 		}
-		ui.Println("  uploaded " + ecosystemLabel(ecosystem) + " manifests: " + strings.Join(names, ", "))
+		ui.Println("  uploaded " + groupName + ": " + strings.Join(names, ", "))
 	}
 	return nil
 }
 
-func trackedManifests(cfg *config.ProjectConfig) map[string]bool {
+func supportingFor(primary detect.Manifest, all []detect.Manifest) []detect.Manifest {
+	primaryDir := filepath.Dir(primary.Path)
+	var out []detect.Manifest
+	for _, m := range all {
+		if m.Primary || m.Ecosystem != primary.Ecosystem {
+			continue
+		}
+		if filepath.Dir(m.Path) == primaryDir {
+			out = append(out, m)
+			continue
+		}
+		// Central NuGet package versions apply to every project in the tree.
+		if primary.Ecosystem == "NuGet" && strings.EqualFold(m.FileName, "Directory.Packages.props") {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func trackedGroupNames(cfg *config.ProjectConfig) map[string]bool {
 	keys := map[string]bool{}
 	if cfg == nil {
 		return keys
 	}
 	for _, group := range cfg.DependencyGrp {
-		for _, name := range group.Manifests {
-			keys[manifestKey(group.Ecosystem, filepath.Base(name))] = true
-		}
+		keys[group.Name] = true
 	}
 	return keys
 }
 
-func manifestKey(ecosystem, fileName string) string {
-	return ecosystem + "|" + strings.ToLower(fileName)
+func groupNameFor(scanDir string, m detect.Manifest) string {
+	if strings.HasSuffix(strings.ToLower(m.FileName), ".csproj") {
+		return strings.TrimSuffix(m.FileName, filepath.Ext(m.FileName))
+	}
+
+	base := filepath.Base(filepath.Dir(m.Path))
+	if filepath.Dir(m.Path) == scanDir || base == "." || base == string(filepath.Separator) {
+		base = baseName(scanDir)
+	}
+	return base + " " + ecosystemLabel(m.Ecosystem)
 }
 
 func trackedTechKeys(cfg *config.ProjectConfig) map[string]bool {
@@ -167,9 +202,4 @@ func ecosystemLabel(ecosystem string) string {
 		return "npm"
 	}
 	return ecosystem
-}
-
-func defaultGroupName(dir, ecosystem string) string {
-	base := baseName(dir)
-	return base + " " + ecosystemLabel(ecosystem)
 }

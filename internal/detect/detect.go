@@ -27,6 +27,7 @@ type Manifest struct {
 	Path      string
 	FileName  string
 	Content   string
+	Primary   bool
 }
 
 type Result struct {

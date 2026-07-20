@@ -27,15 +27,15 @@ func scanTree(root string, result *Result) error {
 
 		switch {
 		case lower == "package.json":
-			addManifest(result, "Npm", path, name)
+			addManifest(result, "Npm", path, name, true)
 		case lower == "package-lock.json":
-			addManifest(result, "Npm", path, name)
+			addManifest(result, "Npm", path, name, false)
 		case lower == "packages.lock.json":
-			addManifest(result, "NuGet", path, name)
+			addManifest(result, "NuGet", path, name, false)
 		case lower == "directory.packages.props":
-			addManifest(result, "NuGet", path, name)
+			addManifest(result, "NuGet", path, name, false)
 		case strings.HasSuffix(lower, ".csproj"):
-			addManifest(result, "NuGet", path, name)
+			addManifest(result, "NuGet", path, name, true)
 			detectDotNet(result, path)
 		case lower == "composer.json":
 			detectLaravel(result, path)
@@ -46,7 +46,7 @@ func scanTree(root string, result *Result) error {
 	})
 }
 
-func addManifest(result *Result, ecosystem, path, name string) {
+func addManifest(result *Result, ecosystem, path, name string, primary bool) {
 	content, ok := readCapped(path)
 	if !ok {
 		return
@@ -56,6 +56,7 @@ func addManifest(result *Result, ecosystem, path, name string) {
 		Path:      path,
 		FileName:  name,
 		Content:   content,
+		Primary:   primary,
 	})
 }
 

@@ -96,8 +96,13 @@ Technologies:
 
 Dependency manifests:
 
-- npm: `package.json` and `package-lock.json`
-- NuGet: `.csproj`, `packages.lock.json`, and `Directory.Packages.props`
+- npm: `package.json`
+- NuGet: `.csproj`
+
+Each project becomes its own dependency group. Lock and version files next to a
+manifest are included automatically so versions are pinned: `package-lock.json`
+for npm, and `packages.lock.json` plus `Directory.Packages.props` for NuGet. A
+solution with four `.csproj` files produces four groups.
 
 Folders like `node_modules`, `bin`, `obj`, and `.git` are skipped.
 

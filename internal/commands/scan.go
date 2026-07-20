@@ -41,8 +41,9 @@ func Scan(args []string) error {
 		return nil
 	}
 
+	primaries := primaryManifests(result)
 	techItems := technologyItems(result, existing)
-	manifestItems := manifestItems(result, existing)
+	manifestItems := manifestItems(dir, primaries, existing)
 
 	var chosenTechs, chosenManifests []ui.Item
 	if assumeYes {
@@ -52,7 +53,7 @@ func Scan(args []string) error {
 		chosenManifests = manifestItems
 	} else {
 		chosenTechs = ui.ToggleList("Technologies detected:", techItems)
-		chosenManifests = ui.ToggleList("Dependency manifests detected:", manifestItems)
+		chosenManifests = ui.ToggleList("Dependency projects detected:", manifestItems)
 	}
 
 	cfg := configFor(project, existing)
@@ -68,7 +69,7 @@ func Scan(args []string) error {
 	if err := applyTechnologies(client, project.ID, result.Technologies, chosenTechs, cfg, saveConfig); err != nil {
 		return err
 	}
-	if err := applyManifests(client, project.ID, dir, result.Manifests, chosenManifests, cfg, saveConfig); err != nil {
+	if err := applyManifests(client, project.ID, dir, primaries, result.Manifests, chosenManifests, cfg, saveConfig); err != nil {
 		return err
 	}
 
