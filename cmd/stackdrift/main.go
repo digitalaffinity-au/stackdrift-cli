@@ -24,6 +24,7 @@ func main() {
 		"remove":  {commands.Remove, "remove technologies or dependencies from this project"},
 		"status":  {commands.Status, "show tracked technologies and dependencies"},
 		"check":   {commands.Check, "report CVE status, exit non-zero if any are found"},
+		"update":  {runUpdate, "download and install the latest release"},
 		"version": {showVersion, "print the CLI version"},
 	}
 
@@ -56,13 +57,17 @@ func showVersion([]string) error {
 	return nil
 }
 
+func runUpdate(args []string) error {
+	return commands.Update(version, args)
+}
+
 func usage(registry map[string]command) {
 	fmt.Println("StackDrift CLI")
 	fmt.Println()
 	fmt.Println("Usage: stackdrift <command>")
 	fmt.Println()
 	fmt.Println("Commands:")
-	order := []string{"login", "scan", "status", "check", "remove", "whoami", "logout", "version"}
+	order := []string{"login", "scan", "status", "check", "remove", "whoami", "logout", "update", "version"}
 	for _, name := range order {
 		fmt.Printf("  %-9s %s\n", name, registry[name].help)
 	}

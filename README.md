@@ -30,6 +30,20 @@ irm https://raw.githubusercontent.com/digitalaffinity-au/stackdrift-cli/main/scr
 This downloads the binary to `%LOCALAPPDATA%\StackDrift` and adds it to your
 PATH.
 
+## Updating
+
+To upgrade to the latest release:
+
+```
+stackdrift update
+```
+
+It downloads the newest binary for your platform and replaces the one you are
+running. If you are already on the latest version it does nothing. Pass
+`--force` to reinstall anyway. Install the CLI somewhere you can write to, such
+as the default `~/.local/bin`, so the update can replace it in place without
+extra permissions.
+
 ## Sign in
 
 ```
@@ -113,6 +127,7 @@ stackdrift status    show the tracked technologies and dependencies
 stackdrift check     report CVE status and exit non-zero if any are found
 stackdrift remove    remove technologies or dependencies from the project
 stackdrift whoami    show the signed in account
+stackdrift update    download and install the latest release
 stackdrift version   print the CLI version
 ```
 
