@@ -1,0 +1,72 @@
+package detect
+
+import (
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+const maxManifestBytes = 5 * 1024 * 1024
+
+func scanTree(root string, result *Result) error {
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+
+		if d.IsDir() {
+			if path != root && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		name := d.Name()
+		lower := strings.ToLower(name)
+
+		switch {
+		case lower == "package.json":
+			addManifest(result, "Npm", path, name)
+		case lower == "package-lock.json":
+			addManifest(result, "Npm", path, name)
+		case lower == "packages.lock.json":
+			addManifest(result, "NuGet", path, name)
+		case lower == "directory.packages.props":
+			addManifest(result, "NuGet", path, name)
+		case strings.HasSuffix(lower, ".csproj"):
+			addManifest(result, "NuGet", path, name)
+			detectDotNet(result, path)
+		case lower == "composer.json":
+			detectLaravel(result, path)
+		case lower == "dockerfile" || strings.HasPrefix(lower, "dockerfile."):
+			detectDockerfile(result, path)
+		}
+		return nil
+	})
+}
+
+func addManifest(result *Result, ecosystem, path, name string) {
+	content, ok := readCapped(path)
+	if !ok {
+		return
+	}
+	result.Manifests = append(result.Manifests, Manifest{
+		Ecosystem: ecosystem,
+		Path:      path,
+		FileName:  name,
+		Content:   content,
+	})
+}
+
+func readCapped(path string) (string, bool) {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() > maxManifestBytes {
+		return "", false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	return string(data), true
+}

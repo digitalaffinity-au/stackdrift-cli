@@ -1,0 +1,256 @@
+package detect
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func write(t *testing.T, dir, name, content string) {
+	t.Helper()
+	full := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func findTech(techs []Technology, name string) (Technology, bool) {
+	for _, tech := range techs {
+		if tech.Name == name {
+			return tech, true
+		}
+	}
+	return Technology{}, false
+}
+
+func hasManifest(manifests []Manifest, fileName, ecosystem string) bool {
+	for _, m := range manifests {
+		if m.FileName == fileName && m.Ecosystem == ecosystem {
+			return true
+		}
+	}
+	return false
+}
+
+func TestScan_NetCoreCsproj_DetectsSdkAndNuGetManifest(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "app.csproj", "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>")
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tech, ok := findTech(result.Technologies, ".NET Core SDK")
+	if !ok {
+		t.Fatal("expected .NET Core SDK")
+	}
+	if tech.Version != "8.0" {
+		t.Fatalf("expected version 8.0, got %q", tech.Version)
+	}
+	if !hasManifest(result.Manifests, "app.csproj", "NuGet") {
+		t.Fatal("expected csproj as a NuGet manifest")
+	}
+}
+
+func TestScan_FullFrameworkCsproj_DetectsFullFramework(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "legacy.csproj", "<Project><TargetFramework>net48</TargetFramework></Project>")
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tech, ok := findTech(result.Technologies, ".NET Full Framework")
+	if !ok {
+		t.Fatal("expected .NET Full Framework")
+	}
+	if tech.Version != "4.8" {
+		t.Fatalf("expected 4.8, got %q", tech.Version)
+	}
+}
+
+func TestScan_MultiTargetCsproj_DetectsBoth(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "multi.csproj", "<Project><TargetFrameworks>net48;net8.0</TargetFrameworks></Project>")
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := findTech(result.Technologies, ".NET Full Framework"); !ok {
+		t.Fatal("expected full framework")
+	}
+	if _, ok := findTech(result.Technologies, ".NET Core SDK"); !ok {
+		t.Fatal("expected core sdk")
+	}
+}
+
+func TestScan_ComposerWithLaravel_DetectsLaravelVersion(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "composer.json", `{"require":{"laravel/framework":"^11.9"}}`)
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tech, ok := findTech(result.Technologies, "Laravel")
+	if !ok {
+		t.Fatal("expected Laravel")
+	}
+	if tech.Version != "11.9" {
+		t.Fatalf("expected 11.9, got %q", tech.Version)
+	}
+}
+
+func TestScan_ComposerWithoutLaravel_DetectsNothing(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "composer.json", `{"require":{"symfony/console":"^7.0"}}`)
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := findTech(result.Technologies, "Laravel"); ok {
+		t.Fatal("did not expect Laravel")
+	}
+}
+
+func TestScan_NpmManifests_DetectedAsNpm(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "package.json", `{"name":"x"}`)
+	write(t, dir, "package-lock.json", `{"lockfileVersion":3}`)
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !hasManifest(result.Manifests, "package.json", "Npm") {
+		t.Fatal("expected package.json npm")
+	}
+	if !hasManifest(result.Manifests, "package-lock.json", "Npm") {
+		t.Fatal("expected package-lock.json npm")
+	}
+}
+
+func TestScan_NodeModules_IsSkipped(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "package.json", `{"name":"root"}`)
+	write(t, dir, "node_modules/dep/package.json", `{"name":"dep"}`)
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	count := 0
+	for _, m := range result.Manifests {
+		if m.FileName == "package.json" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 package.json (node_modules skipped), got %d", count)
+	}
+}
+
+func TestScan_DockerfileUbuntu_DetectsUbuntu(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "Dockerfile", "FROM ubuntu:24.04\nRUN echo hi")
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tech, ok := findTech(result.Technologies, "Ubuntu")
+	if !ok {
+		t.Fatal("expected Ubuntu")
+	}
+	if tech.Version != "24.04" {
+		t.Fatalf("expected 24.04, got %q", tech.Version)
+	}
+}
+
+func TestScan_DockerfileDotnet_DetectsRuntime(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "Dockerfile", "FROM mcr.microsoft.com/dotnet/aspnet:8.0")
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tech, ok := findTech(result.Technologies, ".NET Core Runtime")
+	if !ok {
+		t.Fatal("expected .NET Core Runtime")
+	}
+	if tech.Version != "8.0" {
+		t.Fatalf("expected 8.0, got %q", tech.Version)
+	}
+}
+
+func TestScan_PlatformTargetedTfm_DetectsSdk(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "wpf.csproj", "<Project><TargetFramework>net8.0-windows10.0.19041.0</TargetFramework></Project>")
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tech, ok := findTech(result.Technologies, ".NET Core SDK")
+	if !ok {
+		t.Fatal("expected .NET Core SDK for platform-targeted TFM")
+	}
+	if tech.Version != "8.0" {
+		t.Fatalf("expected 8.0, got %q", tech.Version)
+	}
+	if tech.Category != "Framework" {
+		t.Fatalf("expected Framework category, got %q", tech.Category)
+	}
+}
+
+func TestScan_SuffixedDotnetImageTag_UsesNumericVersion(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "Dockerfile", "FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine")
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tech, ok := findTech(result.Technologies, ".NET Core Runtime")
+	if !ok {
+		t.Fatal("expected .NET Core Runtime")
+	}
+	if tech.Version != "8.0" {
+		t.Fatalf("expected clean version 8.0, got %q", tech.Version)
+	}
+}
+
+func TestScan_DebianImageMajorTag_UsesMajor(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "Dockerfile", "FROM debian:12-slim")
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tech, ok := findTech(result.Technologies, "Debian")
+	if !ok {
+		t.Fatal("expected Debian")
+	}
+	if tech.Version != "12" {
+		t.Fatalf("expected 12, got %q", tech.Version)
+	}
+}

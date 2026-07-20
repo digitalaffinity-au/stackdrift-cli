@@ -1,0 +1,64 @@
+package detect
+
+import (
+	"regexp"
+	"strings"
+)
+
+var (
+	targetFrameworkRe = regexp.MustCompile(`(?i)<TargetFrameworks?>([^<]+)</TargetFrameworks?>`)
+	netCoreRe         = regexp.MustCompile(`^net(\d+)\.(\d+)$`)
+	netFrameworkRe    = regexp.MustCompile(`^net(\d)(\d)(\d)?$`)
+)
+
+func detectDotNet(result *Result, path string) {
+	content, ok := readCapped(path)
+	if !ok {
+		return
+	}
+
+	match := targetFrameworkRe.FindStringSubmatch(content)
+	if match == nil {
+		return
+	}
+
+	for _, tfm := range strings.Split(match[1], ";") {
+		tfm = strings.TrimSpace(strings.ToLower(tfm))
+		if tfm == "" {
+			continue
+		}
+		addFramework(result, moniker(tfm))
+	}
+}
+
+func moniker(tfm string) string {
+	if dash := strings.IndexByte(tfm, '-'); dash >= 0 {
+		return tfm[:dash]
+	}
+	return tfm
+}
+
+func addFramework(result *Result, tfm string) {
+	if core := netCoreRe.FindStringSubmatch(tfm); core != nil {
+		result.Technologies = append(result.Technologies, Technology{
+			Name:     ".NET Core SDK",
+			Version:  core[1] + "." + core[2],
+			Category: "Framework",
+			Source:   "csproj TargetFramework",
+		})
+		return
+	}
+
+	if fw := netFrameworkRe.FindStringSubmatch(tfm); fw != nil {
+		version := fw[1] + "." + fw[2]
+		if fw[3] != "" {
+			version += "." + fw[3]
+		}
+		result.Technologies = append(result.Technologies, Technology{
+			Name:     ".NET Full Framework",
+			Version:  version,
+			Category: "Framework",
+			Source:   "csproj TargetFramework",
+		})
+	}
+}
