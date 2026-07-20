@@ -2,6 +2,7 @@ package commands
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/detect"
@@ -31,6 +32,25 @@ func TestPrimaryManifests_FiltersOutLockAndProps(t *testing.T) {
 	primaries := primaryManifests(result)
 	if len(primaries) != 2 {
 		t.Fatalf("expected 2 primaries, got %d", len(primaries))
+	}
+}
+
+func TestManifestHint_ShowsBundledLock(t *testing.T) {
+	all := []detect.Manifest{
+		{Ecosystem: "Npm", FileName: "package.json", Path: "/app/package.json", Primary: true},
+		{Ecosystem: "Npm", FileName: "yarn.lock", Path: "/app/yarn.lock", Primary: false},
+	}
+	if got := manifestHint("/app", all[0], all); got != "package.json + yarn.lock" {
+		t.Fatalf("expected bundled lock in hint, got %q", got)
+	}
+}
+
+func TestManifestHint_WarnsWhenNoLock(t *testing.T) {
+	all := []detect.Manifest{
+		{Ecosystem: "Npm", FileName: "package.json", Path: "/app/package.json", Primary: true},
+	}
+	if got := manifestHint("/app", all[0], all); !strings.Contains(got, "no lock file") {
+		t.Fatalf("expected no-lock warning, got %q", got)
 	}
 }
 

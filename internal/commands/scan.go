@@ -43,7 +43,7 @@ func Scan(args []string) error {
 
 	primaries := primaryManifests(result)
 	techItems := technologyItems(result, existing)
-	manifestItems := manifestItems(dir, primaries, existing)
+	manifestItems := manifestItems(dir, primaries, result.Manifests, existing)
 
 	var chosenTechs, chosenManifests []ui.Item
 	if assumeYes {

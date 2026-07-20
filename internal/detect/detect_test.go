@@ -141,6 +141,26 @@ func TestScan_NpmManifests_DetectedAsNpm(t *testing.T) {
 	}
 }
 
+func TestScan_YarnAndPnpmLocks_DetectedAsNpm(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "package.json", `{"name":"x"}`)
+	write(t, dir, "yarn.lock", "react@^18.0.0:\n  version \"18.3.1\"\n")
+	write(t, dir, "web/package.json", `{"name":"y"}`)
+	write(t, dir, "web/pnpm-lock.yaml", "lockfileVersion: '9.0'\n")
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !hasManifest(result.Manifests, "yarn.lock", "Npm") {
+		t.Fatal("expected yarn.lock npm")
+	}
+	if !hasManifest(result.Manifests, "pnpm-lock.yaml", "Npm") {
+		t.Fatal("expected pnpm-lock.yaml npm")
+	}
+}
+
 func TestScan_NodeModules_IsSkipped(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "package.json", `{"name":"root"}`)

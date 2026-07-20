@@ -39,18 +39,30 @@ func primaryManifests(result *detect.Result) []detect.Manifest {
 	return primaries
 }
 
-func manifestItems(scanDir string, primaries []detect.Manifest, existing *config.ProjectConfig) []ui.Item {
+func manifestItems(scanDir string, primaries, all []detect.Manifest, existing *config.ProjectConfig) []ui.Item {
 	tracked := trackedGroupNames(existing)
 	items := make([]ui.Item, len(primaries))
 	for i, m := range primaries {
 		name := groupNameFor(scanDir, m)
 		items[i] = ui.Item{
 			Label:    name + " (" + ecosystemLabel(m.Ecosystem) + ")",
-			Hint:     manifestDisplay(scanDir, m.Path),
+			Hint:     manifestHint(scanDir, m, all),
 			Selected: !tracked[name],
 		}
 	}
 	return items
+}
+
+func manifestHint(scanDir string, primary detect.Manifest, all []detect.Manifest) string {
+	files := []string{manifestDisplay(scanDir, primary.Path)}
+	for _, supporting := range supportingFor(primary, all) {
+		files = append(files, filepath.Base(supporting.Path))
+	}
+	hint := strings.Join(files, " + ")
+	if primary.Ecosystem == "Npm" && len(files) == 1 {
+		hint += "  (no lock file, versions not pinned)"
+	}
+	return hint
 }
 
 func applyTechnologies(client *api.Client, projectID int, detected []detect.Technology, chosen []ui.Item, cfg *config.ProjectConfig, save func() error) error {

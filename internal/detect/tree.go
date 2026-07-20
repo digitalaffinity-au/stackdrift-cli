@@ -30,6 +30,10 @@ func scanTree(root string, result *Result) error {
 			addManifest(result, "Npm", path, name, true)
 		case lower == "package-lock.json":
 			addManifest(result, "Npm", path, name, false)
+		case lower == "yarn.lock":
+			addManifest(result, "Npm", path, name, false)
+		case lower == "pnpm-lock.yaml":
+			addManifest(result, "Npm", path, name, false)
 		case lower == "packages.lock.json":
 			addManifest(result, "NuGet", path, name, false)
 		case lower == "directory.packages.props":
