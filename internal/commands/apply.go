@@ -12,18 +12,20 @@ import (
 
 func technologyItems(result *detect.Result, existing *config.ProjectConfig) []ui.Item {
 	tracked := trackedTechKeys(existing)
+	noPrior := len(tracked) == 0
 	items := make([]ui.Item, len(result.Technologies))
 	for i, t := range result.Technologies {
 		label := t.Name
 		if t.Version != "" {
 			label += " " + t.Version
 		}
-		// Host-machine detections describe where the CLI runs, not the project,
-		// so they are offered but not selected by default.
+		// Already-tracked items stay checked so a re-scan shows the previous
+		// selection. Host-machine detections describe where the CLI runs, not
+		// the project, so they are only offered by default on a first run.
 		items[i] = ui.Item{
 			Label:    label,
 			Hint:     t.Source,
-			Selected: !tracked[techKey(t.Name, t.Version)] && !detect.IsHostSource(t.Source),
+			Selected: tracked[techKey(t.Name, t.Version)] || (noPrior && !detect.IsHostSource(t.Source)),
 		}
 	}
 	return items
@@ -41,13 +43,14 @@ func primaryManifests(result *detect.Result) []detect.Manifest {
 
 func manifestItems(scanDir string, primaries, all []detect.Manifest, existing *config.ProjectConfig) []ui.Item {
 	tracked := trackedGroupNames(existing)
+	noPrior := len(tracked) == 0
 	items := make([]ui.Item, len(primaries))
 	for i, m := range primaries {
 		name := groupNameFor(scanDir, m)
 		items[i] = ui.Item{
 			Label:    name + " (" + ecosystemLabel(m.Ecosystem) + ")",
 			Hint:     manifestHint(scanDir, m, all),
-			Selected: !tracked[name],
+			Selected: tracked[name] || noPrior,
 		}
 	}
 	return items

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/digitalaffinity-au/stackdrift-cli/internal/config"
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/detect"
 )
 
@@ -32,6 +33,72 @@ func TestPrimaryManifests_FiltersOutLockAndProps(t *testing.T) {
 	primaries := primaryManifests(result)
 	if len(primaries) != 2 {
 		t.Fatalf("expected 2 primaries, got %d", len(primaries))
+	}
+}
+
+func TestManifestItems_TrackedChecked_UntrackedUncheckedOnRescan(t *testing.T) {
+	primaries := []detect.Manifest{
+		{Ecosystem: "Npm", FileName: "package.json", Path: "/app/a/package.json", Primary: true},
+		{Ecosystem: "Npm", FileName: "package.json", Path: "/app/b/package.json", Primary: true},
+	}
+	existing := &config.ProjectConfig{
+		DependencyGrp: []config.TrackedDependencyGroup{{Name: "a npm"}},
+	}
+
+	items := manifestItems("/app", primaries, primaries, existing)
+
+	if !items[0].Selected {
+		t.Fatal("previously tracked group should be checked")
+	}
+	if items[1].Selected {
+		t.Fatal("untracked group on a re-scan should be unchecked")
+	}
+}
+
+func TestManifestItems_FirstRun_DefaultsChecked(t *testing.T) {
+	primaries := []detect.Manifest{
+		{Ecosystem: "Npm", FileName: "package.json", Path: "/app/a/package.json", Primary: true},
+	}
+
+	items := manifestItems("/app", primaries, primaries, nil)
+
+	if !items[0].Selected {
+		t.Fatal("first run should default to checked")
+	}
+}
+
+func TestTechnologyItems_TrackedChecked_UntrackedHostUncheckedOnRescan(t *testing.T) {
+	result := &detect.Result{Technologies: []detect.Technology{
+		{Name: "Laravel", Version: "11", Category: "Framework", Source: "composer.json"},
+		{Name: "Ubuntu", Version: "24.04", Category: "OperatingSystem", Source: detect.SourceOsRelease},
+	}}
+	existing := &config.ProjectConfig{
+		Technologies: []config.TrackedTechnology{{Name: "Laravel", Version: "11"}},
+	}
+
+	items := technologyItems(result, existing)
+
+	if !items[0].Selected {
+		t.Fatal("previously tracked technology should be checked")
+	}
+	if items[1].Selected {
+		t.Fatal("untracked technology on a re-scan should be unchecked")
+	}
+}
+
+func TestTechnologyItems_FirstRun_HostUncheckedProjectChecked(t *testing.T) {
+	result := &detect.Result{Technologies: []detect.Technology{
+		{Name: "Laravel", Version: "11", Source: "composer.json"},
+		{Name: "Ubuntu", Version: "24.04", Source: detect.SourceOsRelease},
+	}}
+
+	items := technologyItems(result, nil)
+
+	if !items[0].Selected {
+		t.Fatal("first-run project technology should be checked")
+	}
+	if items[1].Selected {
+		t.Fatal("first-run host technology should be unchecked")
 	}
 }
 
