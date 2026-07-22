@@ -45,9 +45,19 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 		return nil
 	}
 
+	cfg := configFor(project, existing)
+
+	// The project can be edited on the website between scans, so what the
+	// server holds decides what is tracked. Without this a technology removed
+	// there stays listed locally, is shown as already tracked, and is silently
+	// skipped instead of being added back.
+	if err := reconcileTracked(client, project, cfg); err != nil {
+		return err
+	}
+
 	primaries := primaryManifests(result)
-	techItems := technologyItems(result, existing)
-	manifestItems := manifestItems(dir, primaries, result.Manifests, existing)
+	techItems := technologyItems(result, cfg)
+	manifestItems := manifestItems(dir, primaries, result.Manifests, cfg)
 
 	var chosenTechs, chosenManifests []ui.Item
 	if assumeYes {
@@ -59,8 +69,6 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 		chosenTechs = ui.ToggleList("Technologies detected:", techItems)
 		chosenManifests = ui.ToggleList("Dependency projects detected:", manifestItems)
 	}
-
-	cfg := configFor(project, existing)
 
 	// Persist the project link before mutating, so an interrupted run still
 	// remembers the project and does not re-add what already succeeded.
