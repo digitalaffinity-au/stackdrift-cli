@@ -96,5 +96,51 @@ else
   echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
 fi
 
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+COMPLETIONS=""
+ZSH_FPATH=""
+
+# Each script is a small stub that asks the binary what to offer, so it keeps
+# working after an update and never has to be reinstalled.
+write_completion() {
+  local shell="$1" dest="$2"
+  mkdir -p "$(dirname "$dest")" 2>/dev/null || return 0
+  if "$TARGET" completion "$shell" > "$dest" 2>/dev/null; then
+    COMPLETIONS="${COMPLETIONS:+$COMPLETIONS, }$shell"
+  else
+    rm -f "$dest"
+  fi
+  return 0
+}
+
+if [ -z "${STACKDRIFT_NO_COMPLETION:-}" ]; then
+  write_completion bash "$DATA_HOME/bash-completion/completions/stackdrift"
+
+  if command -v fish >/dev/null 2>&1 || [ -d "$CONFIG_HOME/fish" ]; then
+    write_completion fish "$CONFIG_HOME/fish/completions/stackdrift.fish"
+  fi
+
+  if command -v zsh >/dev/null 2>&1; then
+    # This one is already on the default fpath, so using it where we can write
+    # to it means zsh needs no edit to ~/.zshrc.
+    if [ -d /usr/local/share/zsh/site-functions ] && [ -w /usr/local/share/zsh/site-functions ]; then
+      write_completion zsh /usr/local/share/zsh/site-functions/_stackdrift
+    else
+      write_completion zsh "$DATA_HOME/zsh/site-functions/_stackdrift"
+      ZSH_FPATH="$DATA_HOME/zsh/site-functions"
+    fi
+  fi
+fi
+
+if [ -n "$COMPLETIONS" ]; then
+  echo
+  echo "Tab completion installed for ${COMPLETIONS}. Open a new terminal to use it."
+  if [ -n "$ZSH_FPATH" ]; then
+    echo "For zsh, add this line to ~/.zshrc above compinit:"
+    echo "  fpath=(${ZSH_FPATH} \$fpath)"
+  fi
+fi
+
 echo
 echo "Next: run 'stackdrift login' then 'stackdrift scan' in a project directory."

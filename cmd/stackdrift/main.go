@@ -12,44 +12,63 @@ import (
 var version = "dev"
 
 type command struct {
-	run  func([]string) error
-	help string
+	name    string
+	run     func([]string) error
+	help    string
+	options []commands.OptionInfo
+	hidden  bool
 }
 
 func main() {
 	os.Exit(run(os.Args[1:], registry(), os.Stdout, os.Stderr))
 }
 
-func registry() map[string]command {
-	return map[string]command{
-		"login":   {commands.Login, "sign in through the StackDrift website"},
-		"logout":  {commands.Logout, "remove the saved credentials"},
-		"whoami":  {commands.Whoami, "show the signed in account"},
-		"scan":    {commands.Scan, "detect technologies and dependencies (add --yes to accept all)"},
-		"remove":  {commands.Remove, "remove technologies or dependencies from this project"},
-		"status":  {commands.Status, "show tracked technologies and dependencies"},
-		"check":   {commands.Check, "report CVE status, exit non-zero if any are found"},
-		"update":  {runUpdate, "download and install the latest release"},
-		"version": {showVersion, "print the CLI version"},
+// commandList is the one place a command is declared. The usage text, the
+// dispatch table and shell completion all read from it, so a new command shows
+// up in all three without being listed anywhere else.
+func commandList() []command {
+	return []command{
+		{name: "login", run: commands.Login, help: "sign in through the StackDrift website"},
+		{name: "scan", run: commands.Scan, help: "detect technologies and dependencies (add --yes to accept all)",
+			options: []commands.OptionInfo{{Name: "--yes", Help: "accept every detection without prompting"}}},
+		{name: "status", run: commands.Status, help: "show tracked technologies and dependencies"},
+		{name: "check", run: commands.Check, help: "report CVE status, exit non-zero if any are found"},
+		{name: "remove", run: commands.Remove, help: "remove technologies or dependencies from this project"},
+		{name: "whoami", run: commands.Whoami, help: "show the signed in account"},
+		{name: "logout", run: commands.Logout, help: "remove the saved credentials"},
+		{name: "update", run: runUpdate, help: "download and install the latest release",
+			options: []commands.OptionInfo{{Name: "--force", Help: "reinstall even when already up to date"}}},
+		{name: "completion", run: runCompletion, help: "print a shell completion script",
+			options: shellOptions()},
+		{name: "version", run: showVersion, help: "print the CLI version"},
+		{name: "__complete", run: runCompleteLine, hidden: true},
 	}
+}
+
+func registry() map[string]command {
+	out := make(map[string]command)
+	for _, c := range commandList() {
+		out[c.name] = c
+	}
+	return out
 }
 
 func run(args []string, registry map[string]command, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		usage(stdout, registry)
+		usage(stdout)
 		return 1
 	}
 
 	name := args[0]
 	if name == "help" || name == "-h" || name == "--help" {
-		usage(stdout, registry)
+		usage(stdout)
 		return 0
 	}
 
 	cmd, ok := registry[name]
 	if !ok {
 		fmt.Fprintln(stderr, "unknown command: "+name)
-		usage(stdout, registry)
+		usage(stdout)
 		return 1
 	}
 
@@ -69,15 +88,48 @@ func runUpdate(args []string) error {
 	return commands.Update(version, args)
 }
 
-func usage(out io.Writer, registry map[string]command) {
+func runCompletion(args []string) error {
+	return commands.Completion(os.Stdout, args)
+}
+
+func runCompleteLine(args []string) error {
+	line := ""
+	if len(args) > 0 {
+		line = args[0]
+	}
+	return commands.CompleteLine(os.Stdout, completionInfo(), line)
+}
+
+func shellOptions() []commands.OptionInfo {
+	var out []commands.OptionInfo
+	for _, shell := range commands.CompletionShells() {
+		out = append(out, commands.OptionInfo{Name: shell})
+	}
+	return out
+}
+
+func completionInfo() []commands.CommandInfo {
+	var out []commands.CommandInfo
+	for _, c := range commandList() {
+		if c.hidden {
+			continue
+		}
+		out = append(out, commands.CommandInfo{Name: c.name, Help: c.help, Options: c.options})
+	}
+	return out
+}
+
+func usage(out io.Writer) {
 	fmt.Fprintln(out, "StackDrift CLI")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Usage: stackdrift <command>")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Commands:")
-	order := []string{"login", "scan", "status", "check", "remove", "whoami", "logout", "update", "version"}
-	for _, name := range order {
-		fmt.Fprintf(out, "  %-9s %s\n", name, registry[name].help)
+	for _, c := range commandList() {
+		if c.hidden {
+			continue
+		}
+		fmt.Fprintf(out, "  %-11s %s\n", c.name, c.help)
 	}
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Set STACKDRIFT_URL to point at a different server.")

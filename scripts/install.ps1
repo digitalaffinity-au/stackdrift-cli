@@ -43,5 +43,25 @@ else {
     Write-Host "Installed to $target"
 }
 
+if (-not $env:STACKDRIFT_NO_COMPLETION) {
+    # PowerShell has no drop-in completion directory, so the script is written
+    # beside the binary and loaded from the profile. It asks the binary what to
+    # offer, so it survives an update without being rewritten.
+    $completionDir = Join-Path $env:LOCALAPPDATA "StackDrift"
+    New-Item -ItemType Directory -Force -Path $completionDir | Out-Null
+    $completionFile = Join-Path $completionDir "completion.ps1"
+    & $target completion powershell | Set-Content -Path $completionFile -Encoding UTF8
+
+    $alreadyLoaded = (Test-Path $PROFILE) -and ((Get-Content $PROFILE -Raw) -match [regex]::Escape($completionFile))
+    if (-not $alreadyLoaded) {
+        $profileDir = Split-Path -Parent $PROFILE
+        if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Force -Path $profileDir | Out-Null }
+        Add-Content -Path $PROFILE -Value "`n# StackDrift tab completion`n. `"$completionFile`""
+        Write-Host ""
+        Write-Host "Added tab completion to your PowerShell profile ($PROFILE)."
+    }
+    Write-Host "Tab completion installed. Open a new terminal to use it."
+}
+
 Write-Host ""
 Write-Host "Next: run 'stackdrift login' then 'stackdrift scan' in a project directory."

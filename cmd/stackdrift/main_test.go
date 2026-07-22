@@ -15,8 +15,8 @@ func stubRegistry(calls *[]string, err error) map[string]command {
 		}
 	}
 	return map[string]command{
-		"scan":  {record("scan"), "detect technologies"},
-		"check": {record("check"), "report CVE status"},
+		"scan":  {name: "scan", run: record("scan"), help: "detect technologies"},
+		"check": {name: "check", run: record("check"), help: "report CVE status"},
 	}
 }
 
@@ -99,32 +99,69 @@ func TestRun_HelpFlags_ShowUsageAndSucceed(t *testing.T) {
 	}
 }
 
-func TestRegistry_ListsEveryCommandTheUsageAdvertises(t *testing.T) {
-	// usage() prints from a hardcoded order list, so a command added to one and
-	// not the other would show a blank description.
-	advertised := []string{"login", "scan", "status", "check", "remove", "whoami", "logout", "update", "version"}
+func TestRegistry_DispatchesEveryDeclaredCommand(t *testing.T) {
 	actual := registry()
 
-	for _, name := range advertised {
-		if _, ok := actual[name]; !ok {
-			t.Fatalf("usage advertises %q but the registry has no such command", name)
+	for _, c := range commandList() {
+		if _, ok := actual[c.name]; !ok {
+			t.Fatalf("%q is declared but cannot be dispatched", c.name)
+		}
+		if c.run == nil {
+			t.Fatalf("%q has nothing to run", c.name)
 		}
 	}
-	if len(actual) != len(advertised) {
-		t.Fatalf("expected the registry and usage list to match, registry has %d and usage lists %d", len(actual), len(advertised))
+	if len(actual) != len(commandList()) {
+		t.Fatalf("expected one registry entry per command, got %d for %d", len(actual), len(commandList()))
 	}
 }
 
-func TestUsage_DescribesEveryCommand(t *testing.T) {
+func TestUsage_DescribesEveryVisibleCommand(t *testing.T) {
 	var out bytes.Buffer
-	usage(&out, registry())
+	usage(&out)
 
-	for name, cmd := range registry() {
-		if !strings.Contains(out.String(), name) {
-			t.Fatalf("expected %q in the usage text", name)
+	for _, c := range commandList() {
+		if c.hidden {
+			continue
 		}
-		if !strings.Contains(out.String(), cmd.help) {
-			t.Fatalf("expected the description for %q in the usage text", name)
+		if !strings.Contains(out.String(), c.name) {
+			t.Fatalf("expected %q in the usage text", c.name)
 		}
+		if !strings.Contains(out.String(), c.help) {
+			t.Fatalf("expected the description for %q in the usage text", c.name)
+		}
+	}
+}
+
+func TestUsage_HidesInternalCommands(t *testing.T) {
+	var out bytes.Buffer
+	usage(&out)
+
+	// __complete exists for the shell, not for a person reading the help.
+	if strings.Contains(out.String(), "__complete") {
+		t.Fatalf("expected the completion helper hidden from usage, got %q", out.String())
+	}
+}
+
+func TestCompletionInfo_ExcludesTheHiddenHelper(t *testing.T) {
+	for _, info := range completionInfo() {
+		if info.Name == "__complete" {
+			t.Fatal("the completion helper must not suggest itself")
+		}
+	}
+}
+
+func TestCompletionInfo_CarriesTheOptionsOfEachCommand(t *testing.T) {
+	options := map[string][]string{}
+	for _, info := range completionInfo() {
+		for _, option := range info.Options {
+			options[info.Name] = append(options[info.Name], option.Name)
+		}
+	}
+
+	if !strings.Contains(strings.Join(options["scan"], " "), "--yes") {
+		t.Fatalf("expected scan to offer --yes, got %v", options["scan"])
+	}
+	if !strings.Contains(strings.Join(options["completion"], " "), "bash") {
+		t.Fatalf("expected completion to offer the supported shells, got %v", options["completion"])
 	}
 }

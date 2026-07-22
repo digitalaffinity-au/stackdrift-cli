@@ -33,6 +33,33 @@ This installs the binary into `%LOCALAPPDATA%\Microsoft\WindowsApps`, which is
 already on your PATH, so you can run `stackdrift` from anywhere without changing
 any environment variables.
 
+## Tab completion
+
+The installer sets up tab completion, so pressing Tab after `stackdrift`
+completes the command names and the options each one takes:
+
+```
+stackdrift sc<Tab>        completes to "stackdrift scan"
+stackdrift scan --<Tab>   offers "--yes"
+```
+
+Open a new terminal after installing for it to take effect. bash and fish need
+nothing further. zsh loads it automatically when it can be written to
+`/usr/local/share/zsh/site-functions`; otherwise the installer prints the one
+line to add to your `~/.zshrc`. On Windows the installer adds a line to your
+PowerShell profile, because PowerShell has no directory it loads completions
+from on its own.
+
+The completion asks the CLI itself what to offer, so it stays correct across
+updates and never needs reinstalling. Set `STACKDRIFT_NO_COMPLETION=1` before
+running the installer to skip it. To write a script yourself:
+
+```
+stackdrift completion bash > ~/.local/share/bash-completion/completions/stackdrift
+```
+
+`bash`, `zsh`, `fish`, and `powershell` are supported.
+
 ## Updating
 
 To upgrade to the latest release:
@@ -134,12 +161,13 @@ snapshots of the whole site rather than anything you are running.
 ## Other commands
 
 ```
-stackdrift status    show the tracked technologies and dependencies
-stackdrift check     report CVE status and exit non-zero if any are found
-stackdrift remove    remove technologies or dependencies from the project
-stackdrift whoami    show the signed in account
-stackdrift update    download and install the latest release
-stackdrift version   print the CLI version
+stackdrift status      show the tracked technologies and dependencies
+stackdrift check       report CVE status and exit non-zero if any are found
+stackdrift remove      remove technologies or dependencies from the project
+stackdrift whoami      show the signed in account
+stackdrift update      download and install the latest release
+stackdrift completion  print a shell completion script
+stackdrift version     print the CLI version
 ```
 
 ## Pointing at a different server
