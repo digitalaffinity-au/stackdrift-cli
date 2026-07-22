@@ -47,13 +47,20 @@ func manifestItems(scanDir string, primaries, all []detect.Manifest, existing *c
 	items := make([]ui.Item, len(primaries))
 	for i, m := range primaries {
 		name := groupNameFor(scanDir, m)
+		// An npm manifest with no lock only carries version ranges, which is
+		// weak evidence and usually a vendored copy, so it is offered rather
+		// than assumed.
 		items[i] = ui.Item{
 			Label:    name + " (" + ecosystemLabel(m.Ecosystem) + ")",
 			Hint:     manifestHint(scanDir, m, all),
-			Selected: tracked[name] || noPrior,
+			Selected: tracked[name] || (noPrior && !isUnpinnedNpm(m, all)),
 		}
 	}
 	return items
+}
+
+func isUnpinnedNpm(primary detect.Manifest, all []detect.Manifest) bool {
+	return primary.Ecosystem == "Npm" && len(supportingFor(primary, all)) == 0
 }
 
 func manifestHint(scanDir string, primary detect.Manifest, all []detect.Manifest) string {
@@ -62,7 +69,7 @@ func manifestHint(scanDir string, primary detect.Manifest, all []detect.Manifest
 		files = append(files, filepath.Base(supporting.Path))
 	}
 	hint := strings.Join(files, " + ")
-	if primary.Ecosystem == "Npm" && len(files) == 1 {
+	if isUnpinnedNpm(primary, all) {
 		hint += "  (no lock file, versions not pinned)"
 	}
 	return hint

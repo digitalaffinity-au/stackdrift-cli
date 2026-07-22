@@ -46,6 +46,8 @@ var skipDirs = map[string]bool{
 	".vs":          true,
 	".idea":        true,
 	"packages":     true,
+	"publish":      true,
+	"docs":         true,
 }
 
 func Scan(root string) (*Result, error) {

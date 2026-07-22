@@ -56,14 +56,58 @@ func TestManifestItems_TrackedChecked_UntrackedUncheckedOnRescan(t *testing.T) {
 }
 
 func TestManifestItems_FirstRun_DefaultsChecked(t *testing.T) {
+	all := []detect.Manifest{
+		{Ecosystem: "Npm", FileName: "package.json", Path: "/app/a/package.json", Primary: true},
+		{Ecosystem: "Npm", FileName: "package-lock.json", Path: "/app/a/package-lock.json"},
+	}
+
+	items := manifestItems("/app", all[:1], all, nil)
+
+	if !items[0].Selected {
+		t.Fatal("a pinned manifest should default to checked on a first run")
+	}
+}
+
+func TestManifestItems_FirstRunNpmWithoutLock_IsOfferedNotAssumed(t *testing.T) {
+	// A lockless package.json carries only version ranges, and is usually a
+	// vendored copy, so it must not be uploaded by --yes without being asked.
 	primaries := []detect.Manifest{
 		{Ecosystem: "Npm", FileName: "package.json", Path: "/app/a/package.json", Primary: true},
 	}
 
 	items := manifestItems("/app", primaries, primaries, nil)
 
+	if items[0].Selected {
+		t.Fatal("an unpinned npm manifest should start unchecked")
+	}
+}
+
+func TestManifestItems_TrackedNpmWithoutLock_StaysChecked(t *testing.T) {
+	primaries := []detect.Manifest{
+		{Ecosystem: "Npm", FileName: "package.json", Path: "/app/a/package.json", Primary: true},
+	}
+	existing := &config.ProjectConfig{
+		DependencyGrp: []config.TrackedDependencyGroup{{Name: "a npm"}},
+	}
+
+	items := manifestItems("/app", primaries, primaries, existing)
+
 	if !items[0].Selected {
-		t.Fatal("first run should default to checked")
+		t.Fatal("an already tracked group stays checked even without a lock")
+	}
+}
+
+func TestManifestItems_FirstRunCsproj_IsCheckedWithoutALock(t *testing.T) {
+	// A csproj declares its own versions, so the npm lock rule must not
+	// quietly deselect every .NET project.
+	primaries := []detect.Manifest{
+		{Ecosystem: "NuGet", FileName: "A.csproj", Path: "/sln/A/A.csproj", Primary: true},
+	}
+
+	items := manifestItems("/sln", primaries, primaries, nil)
+
+	if !items[0].Selected {
+		t.Fatal("a csproj should default to checked without needing a lock file")
 	}
 }
 

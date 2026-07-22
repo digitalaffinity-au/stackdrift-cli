@@ -119,3 +119,92 @@ func TestIsVendorDir_MatchesRegardlessOfCase(t *testing.T) {
 		t.Fatal("a lib folder outside wwwroot is source, not vendored")
 	}
 }
+
+func TestScan_PublicVendors_AreNotProjects(t *testing.T) {
+	dir := t.TempDir()
+	for _, lib := range []string{"bootstrap", "echarts", "Chart.js"} {
+		write(t, dir, filepath.Join("public", "vendors", lib, "package.json"), `{"name":"`+lib+`"}`)
+	}
+	write(t, dir, "package.json", `{"name":"my-app"}`)
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	paths := primaryPaths(result)
+	if len(paths) != 1 || filepath.Dir(paths[0]) != dir {
+		t.Fatalf("expected only the application manifest, got %v", paths)
+	}
+}
+
+func TestScan_WordPressPluginsAndThemes_AreNotProjects(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, filepath.Join("wp-content", "plugins", "woocommerce", "package.json"), `{"name":"woocommerce"}`)
+	write(t, dir, filepath.Join("wp-content", "themes", "mytheme", "package.json"), `{"name":"mytheme"}`)
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if paths := primaryPaths(result); len(paths) != 0 {
+		t.Fatalf("plugin and theme build tooling is not the site's dependencies, got %v", paths)
+	}
+}
+
+func TestScan_WordPressCoreStillDetected_WithPluginsSkipped(t *testing.T) {
+	dir := t.TempDir()
+	writeWordPress(t, dir, ".", "6.8.3")
+	write(t, dir, filepath.Join("wp-content", "plugins", "woocommerce", "package.json"), `{"name":"woocommerce"}`)
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := findTech(result.Technologies, "WordPress"); !ok {
+		t.Fatal("skipping plugins must not affect core detection")
+	}
+}
+
+func TestScan_DocsAndPublishDirectories_AreSkipped(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, filepath.Join("docs", "template", "package.json"), `{"name":"template"}`)
+	write(t, dir, filepath.Join("publish", "package.json"), `{"name":"output"}`)
+	write(t, dir, "package.json", `{"name":"my-app"}`)
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	paths := primaryPaths(result)
+	if len(paths) != 1 || filepath.Dir(paths[0]) != dir {
+		t.Fatalf("expected only the application manifest, got %v", paths)
+	}
+}
+
+func TestScan_GenericVendorConventions_AreSkipped(t *testing.T) {
+	for _, vendor := range []string{
+		filepath.Join("assets", "vendor"),
+		filepath.Join("assets", "plugins"),
+		filepath.Join("assets", "libs"),
+		filepath.Join("static", "vendor"),
+		filepath.Join("public", "vendor"),
+		"third_party",
+		"thirdparty",
+		"external",
+	} {
+		dir := t.TempDir()
+		write(t, dir, filepath.Join(vendor, "somelib", "package.json"), `{"name":"somelib"}`)
+
+		result, err := Scan(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if paths := primaryPaths(result); len(paths) != 0 {
+			t.Fatalf("expected %s to be treated as vendored, got %v", vendor, paths)
+		}
+	}
+}
