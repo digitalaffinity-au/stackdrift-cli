@@ -27,7 +27,7 @@ func Remove(args []string) error {
 		return err
 	}
 	if cfg == nil || cfg.ProjectID == 0 {
-		return fmt.Errorf("no %s here, run: stackdrift scan", config.ProjectFileName)
+		return errNoProjectLink
 	}
 
 	project, err := client.GetProject(cfg.ProjectID)
@@ -124,7 +124,7 @@ func Status(args []string) error {
 		return err
 	}
 	if cfg == nil || cfg.ProjectID == 0 {
-		return fmt.Errorf("no %s here, run: stackdrift scan", config.ProjectFileName)
+		return errNoProjectLink
 	}
 
 	project, err := client.GetProject(cfg.ProjectID)

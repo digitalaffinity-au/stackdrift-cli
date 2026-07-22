@@ -16,7 +16,7 @@ func scanTree(root string, result *Result) error {
 		}
 
 		if d.IsDir() {
-			if path != root && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".")) {
+			if path != root && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".") || isWordPressUploads(path)) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -45,6 +45,8 @@ func scanTree(root string, result *Result) error {
 			detectLaravel(result, path)
 		case lower == "dockerfile" || strings.HasPrefix(lower, "dockerfile."):
 			detectDockerfile(result, path)
+		case isWordPressVersionFile(path, name):
+			detectWordPress(result, root, path)
 		}
 		return nil
 	})

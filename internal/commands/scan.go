@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -78,7 +78,10 @@ func Scan(args []string) error {
 	}
 
 	ui.Println()
-	ui.Println("Saved " + config.ProjectFileName + " and updated project '" + project.Name + "'.")
+	ui.Println("Linked this directory to project '" + project.Name + "' and updated it.")
+	if path, err := config.ProjectFilePath(project.ID); err == nil {
+		ui.Println("Link saved to " + path)
+	}
 	return nil
 }
 
@@ -88,22 +91,27 @@ func resolveProject(client *api.Client, dir string, assumeYes bool) (*api.Projec
 		return nil, nil, err
 	}
 
+	if existing != nil && existing.Migrated {
+		ui.Println("Moved the project link out of " + dir + " so it is not exposed by a web server.")
+		ui.Println("The old " + config.ProjectFileName + " file was removed. If it is in git, commit that deletion.")
+	}
+
 	if existing != nil && existing.ProjectID != 0 {
 		project, err := client.GetProject(existing.ProjectID)
 		if err == nil {
-			ui.Println("Using project '" + project.Name + "' from " + config.ProjectFileName + ".")
+			ui.Println("Using linked project '" + project.Name + "'.")
 			return project, existing, nil
 		}
 		if !isNotFound(err) {
 			return nil, nil, err
 		}
-		ui.Println("The project recorded in " + config.ProjectFileName + " no longer exists. Choose another.")
+		ui.Println("The linked project no longer exists. Choose another.")
 		existing.Technologies = nil
 		existing.DependencyGrp = nil
 	}
 
 	if assumeYes {
-		return nil, nil, fmt.Errorf("no %s here yet, run scan once without --yes to choose a project", config.ProjectFileName)
+		return nil, nil, errors.New("this directory is not linked to a project yet, run scan once without --yes to choose one")
 	}
 
 	project, err := chooseProject(client)

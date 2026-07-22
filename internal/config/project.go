@@ -2,8 +2,12 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 )
 
 const ProjectFileName = ".stackdrift"
@@ -25,16 +29,141 @@ type ProjectConfig struct {
 	Version       int                      `json:"version"`
 	ProjectID     int                      `json:"projectId"`
 	ProjectName   string                   `json:"projectName"`
+	Paths         []string                 `json:"paths"`
 	Technologies  []TrackedTechnology      `json:"technologies"`
 	DependencyGrp []TrackedDependencyGroup `json:"dependencyGroups"`
+
+	// Set when the link was just moved out of a scanned directory, so the
+	// caller can tell the user the old file is gone.
+	Migrated bool `json:"-"`
 }
 
-func ProjectFilePath(dir string) string {
+// StoreDir is where project links live. They are kept outside the scanned
+// directory because a scan target is often a public web root, where the file
+// would be readable by anyone who requests it.
+func StoreDir() (string, error) {
+	if fromEnv := strings.TrimSpace(os.Getenv("STACKDRIFT_HOME")); fromEnv != "" {
+		return fromEnv, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".stackdrift"), nil
+}
+
+func ProjectFilePath(projectID int) (string, error) {
+	store, err := StoreDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(store, strconv.Itoa(projectID), ProjectFileName), nil
+}
+
+func LegacyProjectFilePath(dir string) string {
 	return filepath.Join(dir, ProjectFileName)
 }
 
 func LoadProject(dir string) (*ProjectConfig, error) {
-	data, err := os.ReadFile(ProjectFilePath(dir))
+	dir = absolutePath(dir)
+
+	cfg, err := findLinked(dir)
+	if err != nil || cfg != nil {
+		return cfg, err
+	}
+
+	return migrateLegacy(dir)
+}
+
+func SaveProject(dir string, cfg *ProjectConfig) error {
+	if cfg.ProjectID <= 0 {
+		return errors.New("cannot save a project link without a project id")
+	}
+	if cfg.Version == 0 {
+		cfg.Version = 1
+	}
+	if cfg.Technologies == nil {
+		cfg.Technologies = []TrackedTechnology{}
+	}
+	if cfg.DependencyGrp == nil {
+		cfg.DependencyGrp = []TrackedDependencyGroup{}
+	}
+	cfg.addPath(absolutePath(dir))
+
+	path, err := ProjectFilePath(cfg.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+// findLinked resolves a directory to its project by reading every stored link,
+// since the store is keyed by project id and a project can be scanned from
+// more than one directory.
+func findLinked(dir string) (*ProjectConfig, error) {
+	store, err := StoreDir()
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(store)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		// A link that will not parse is skipped rather than failing every
+		// other project. The next scan rewrites it.
+		cfg, err := readProjectFile(filepath.Join(store, entry.Name(), ProjectFileName))
+		if err != nil || cfg == nil {
+			continue
+		}
+		if cfg.linkedTo(dir) {
+			return cfg, nil
+		}
+	}
+	return nil, nil
+}
+
+func migrateLegacy(dir string) (*ProjectConfig, error) {
+	legacy := LegacyProjectFilePath(dir)
+
+	cfg, err := readProjectFile(legacy)
+	if err != nil || cfg == nil {
+		return nil, err
+	}
+	if cfg.ProjectID <= 0 {
+		return nil, nil
+	}
+
+	if err := SaveProject(dir, cfg); err != nil {
+		return nil, err
+	}
+	if err := os.Remove(legacy); err != nil {
+		return nil, err
+	}
+
+	cfg.Migrated = true
+	return cfg, nil
+}
+
+func readProjectFile(path string) (*ProjectConfig, error) {
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -49,21 +178,32 @@ func LoadProject(dir string) (*ProjectConfig, error) {
 	return &cfg, nil
 }
 
-func SaveProject(dir string, cfg *ProjectConfig) error {
-	if cfg.Version == 0 {
-		cfg.Version = 1
+func (c *ProjectConfig) linkedTo(dir string) bool {
+	for _, path := range c.Paths {
+		if samePath(path, dir) {
+			return true
+		}
 	}
-	if cfg.Technologies == nil {
-		cfg.Technologies = []TrackedTechnology{}
-	}
-	if cfg.DependencyGrp == nil {
-		cfg.DependencyGrp = []TrackedDependencyGroup{}
-	}
+	return false
+}
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
+func (c *ProjectConfig) addPath(dir string) {
+	if c.linkedTo(dir) {
+		return
 	}
+	c.Paths = append(c.Paths, dir)
+}
 
-	return os.WriteFile(ProjectFilePath(dir), append(data, '\n'), 0o644)
+func absolutePath(dir string) string {
+	if abs, err := filepath.Abs(dir); err == nil {
+		return filepath.Clean(abs)
+	}
+	return filepath.Clean(dir)
+}
+
+func samePath(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }

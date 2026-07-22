@@ -33,7 +33,7 @@ func Check(args []string) error {
 		return err
 	}
 	if cfg == nil || cfg.ProjectID == 0 {
-		return fmt.Errorf("no %s here, run: stackdrift scan", config.ProjectFileName)
+		return errNoProjectLink
 	}
 
 	stats, err := client.GetProjectStats(cfg.ProjectID)

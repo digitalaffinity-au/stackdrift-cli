@@ -75,11 +75,12 @@ stackdrift scan
 The first time, it asks whether to add the directory to an existing project or
 create a new one. It then lists the technologies and dependency manifests it
 found. Use the numbers to toggle items on or off, then press Enter. The CLI adds
-the selected items to your project and writes a `.stackdrift` file that records
-what is tracked.
+the selected items to your project and records what is tracked.
 
-Commit `.stackdrift` to your repository. On later runs the CLI reads it and does
-not ask you to pick a project again.
+That record is stored in `~/.stackdrift/<project-id>/.stackdrift`, not in the
+directory you scanned. Scan targets are often public web roots, so nothing is
+written where a web server could serve it. On later runs the CLI matches the
+directory to its project and does not ask you to pick one again.
 
 To accept everything without prompts, for example on a first automated run:
 
@@ -87,8 +88,7 @@ To accept everything without prompts, for example on a first automated run:
 stackdrift scan --yes
 ```
 
-This needs the project to be chosen once interactively first, or a `.stackdrift`
-file already present.
+This needs the project to be chosen once interactively in that directory first.
 
 ## Check for CVEs in CI
 
@@ -107,6 +107,7 @@ Technologies:
 - .NET Full Framework and .NET Core SDK, from `.csproj` target frameworks
 - .NET Core Runtime, from a Dockerfile base image
 - Laravel, from `composer.json`
+- WordPress, from `wp-includes/version.php`
 - The host operating system, from `/etc/os-release`
 - The Linux kernel version
 - Operating systems named in a Dockerfile `FROM` line
@@ -122,6 +123,13 @@ for npm, and `packages.lock.json` plus `Directory.Packages.props` for NuGet. A
 solution with four `.csproj` files produces four groups.
 
 Folders like `node_modules`, `bin`, `obj`, and `.git` are skipped.
+
+WordPress is found wherever its core sits, so a standard install, a subdirectory
+install, and a Bedrock tree at `web/wp` all work without configuration. If a
+directory holds more than one install, each is listed separately with its path,
+which is how a forgotten copy at an old version shows up. Copies under
+`wp-content/uploads` are ignored, because that is where backup plugins leave
+snapshots of the whole site rather than anything you are running.
 
 ## Other commands
 

@@ -10,6 +10,8 @@ import (
 
 var errNotSignedIn = errors.New("not signed in, run: stackdrift login")
 
+var errNoProjectLink = errors.New("this directory is not linked to a StackDrift project, run: stackdrift scan")
+
 func isNotFound(err error) bool {
 	var apiErr *api.Error
 	return errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound
