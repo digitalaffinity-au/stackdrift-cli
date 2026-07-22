@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/digitalaffinity-au/stackdrift-cli/internal/api"
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/config"
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/ui"
 )
@@ -28,6 +29,10 @@ func Check(args []string) error {
 		return err
 	}
 
+	return check(client, dir)
+}
+
+func check(client *api.Client, dir string) error {
 	cfg, err := config.LoadProject(dir)
 	if err != nil {
 		return err

@@ -41,6 +41,10 @@ func Login(baseURL string) error {
 		return err
 	}
 
+	return finishLogin(baseURL, token)
+}
+
+func finishLogin(baseURL, token string) error {
 	me, err := api.New(baseURL, token).Me()
 	if err != nil {
 		return fmt.Errorf("signed in but could not read account: %w", err)

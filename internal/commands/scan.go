@@ -24,6 +24,10 @@ func Scan(args []string) error {
 		return err
 	}
 
+	return scan(client, dir, assumeYes)
+}
+
+func scan(client *api.Client, dir string, assumeYes bool) error {
 	project, existing, err := resolveProject(client, dir, assumeYes)
 	if err != nil {
 		return err

@@ -22,6 +22,10 @@ func Remove(args []string) error {
 		return err
 	}
 
+	return remove(client, dir)
+}
+
+func remove(client *api.Client, dir string) error {
 	cfg, err := config.LoadProject(dir)
 	if err != nil {
 		return err
@@ -62,6 +66,16 @@ func removeTechnologies(client *api.Client, dir string, cfg *config.ProjectConfi
 
 	chosen := ui.ToggleList("Select technologies to REMOVE:", items)
 
+	removed, err := deleteChosenTechnologies(client, techs, chosen)
+	if err != nil {
+		return err
+	}
+
+	cfg.Technologies = filterTech(cfg.Technologies, removed)
+	return config.SaveProject(dir, cfg)
+}
+
+func deleteChosenTechnologies(client *api.Client, techs []api.Technology, chosen []ui.Item) (map[string]bool, error) {
 	removed := map[string]bool{}
 	for i, item := range chosen {
 		if !item.Selected {
@@ -69,14 +83,12 @@ func removeTechnologies(client *api.Client, dir string, cfg *config.ProjectConfi
 		}
 		t := techs[i]
 		if err := client.DeleteTechnology(t.ID); err != nil {
-			return err
+			return removed, err
 		}
 		removed[techKey(t.Name, t.Version)] = true
 		ui.Println("  removed technology: " + label(t.Name, t.Version))
 	}
-
-	cfg.Technologies = filterTech(cfg.Technologies, removed)
-	return config.SaveProject(dir, cfg)
+	return removed, nil
 }
 
 func removeDependencyGroups(client *api.Client, dir string, cfg *config.ProjectConfig, groups []api.DependencyGroupInfo) error {
@@ -91,6 +103,16 @@ func removeDependencyGroups(client *api.Client, dir string, cfg *config.ProjectC
 
 	chosen := ui.ToggleList("Select dependency groups to REMOVE:", items)
 
+	removed, err := deleteChosenGroups(client, groups, chosen)
+	if err != nil {
+		return err
+	}
+
+	cfg.DependencyGrp = filterGroups(cfg.DependencyGrp, removed)
+	return config.SaveProject(dir, cfg)
+}
+
+func deleteChosenGroups(client *api.Client, groups []api.DependencyGroupInfo, chosen []ui.Item) (map[string]bool, error) {
 	removed := map[string]bool{}
 	for i, item := range chosen {
 		if !item.Selected {
@@ -98,14 +120,12 @@ func removeDependencyGroups(client *api.Client, dir string, cfg *config.ProjectC
 		}
 		g := groups[i]
 		if err := client.DeleteDependencyGroup(g.ID); err != nil {
-			return err
+			return removed, err
 		}
 		removed[g.Name] = true
 		ui.Println("  removed dependency group: " + g.Name)
 	}
-
-	cfg.DependencyGrp = filterGroups(cfg.DependencyGrp, removed)
-	return config.SaveProject(dir, cfg)
+	return removed, nil
 }
 
 func Status(args []string) error {
@@ -119,6 +139,10 @@ func Status(args []string) error {
 		return err
 	}
 
+	return status(client, dir)
+}
+
+func status(client *api.Client, dir string) error {
 	cfg, err := config.LoadProject(dir)
 	if err != nil {
 		return err
