@@ -258,3 +258,51 @@ func TestScan_NothingDetected_MakesNoChanges(t *testing.T) {
 		t.Fatal("expected no changes when nothing is detected")
 	}
 }
+
+func TestApplyManifests_ServerCouldNotReadTheFile_WarnsAndDoesNotTrack(t *testing.T) {
+	// A 200 with unsupportedFiles means no group was created, so reporting a
+	// successful upload would hide the failure exactly as it did for BOM csproj.
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"summary":{"totalCount":0,"groups":[]},"unsupportedFiles":["TradeCircle.Web.csproj"]}`))
+	})
+
+	all := []detect.Manifest{
+		{Ecosystem: "NuGet", FileName: "TradeCircle.Web.csproj", Path: "/p/TradeCircle.Web.csproj", Content: "<Project/>", Primary: true},
+	}
+	cfg := &config.ProjectConfig{ProjectID: 1}
+
+	out := captureOutput(func() {
+		_ = applyManifests(client, 1, "/p", all, all, selected(1, 0), cfg, func() error { return nil })
+	})
+
+	if !strings.Contains(out, "WARNING") {
+		t.Fatalf("expected a warning that the file was not read, got %q", out)
+	}
+	if len(cfg.DependencyGrp) != 0 {
+		t.Fatalf("a group the server never created must not be tracked, got %+v", cfg.DependencyGrp)
+	}
+}
+
+func TestApplyManifests_PartialRejection_StillTracksTheGroup(t *testing.T) {
+	// The lock was unreadable but the manifest was fine, so the group exists.
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"summary":{"totalCount":3,"groups":[]},"unsupportedFiles":["package-lock.json"]}`))
+	})
+
+	all := []detect.Manifest{
+		{Ecosystem: "Npm", FileName: "package.json", Path: "/p/package.json", Content: "{}", Primary: true},
+		{Ecosystem: "Npm", FileName: "package-lock.json", Path: "/p/package-lock.json", Content: "{}"},
+	}
+	cfg := &config.ProjectConfig{ProjectID: 1}
+
+	out := captureOutput(func() {
+		_ = applyManifests(client, 1, "/p", all[:1], all, selected(1, 0), cfg, func() error { return nil })
+	})
+
+	if !strings.Contains(out, "WARNING") {
+		t.Fatalf("expected the unreadable lock reported, got %q", out)
+	}
+	if len(cfg.DependencyGrp) != 1 {
+		t.Fatalf("expected the group still tracked, got %+v", cfg.DependencyGrp)
+	}
+}

@@ -132,13 +132,24 @@ func applyManifests(client *api.Client, projectID int, dir string, primaries, al
 			names[j] = manifestDisplay(dir, m.Path)
 		}
 
-		_, err := client.UploadManifests(projectID, api.UploadManifestsRequest{
+		resp, err := client.UploadManifests(projectID, api.UploadManifestsRequest{
 			Ecosystem: primary.Ecosystem,
 			GroupName: groupName,
 			Files:     files,
 		})
 		if err != nil {
 			return err
+		}
+
+		// The server answers 200 even when it could not read a file, so
+		// reporting the upload without checking this claims success for a
+		// group that was never created.
+		if rejected := rejectedFiles(resp, names); len(rejected) > 0 {
+			ui.Println("  WARNING " + groupName + ": the server could not read " + strings.Join(rejected, ", "))
+			if len(rejected) == len(names) {
+				ui.Println("           nothing was tracked for this project")
+				continue
+			}
 		}
 
 		cfg.DependencyGrp = append(cfg.DependencyGrp, config.TrackedDependencyGroup{
@@ -224,4 +235,23 @@ func ecosystemLabel(ecosystem string) string {
 		return "npm"
 	}
 	return ecosystem
+}
+
+// rejectedFiles reports which of the uploaded files the server said it could
+// not read, matched by base name since the server echoes what it was sent.
+func rejectedFiles(resp *api.UploadManifestsResponse, sent []string) []string {
+	if resp == nil || len(resp.UnsupportedFiles) == 0 {
+		return nil
+	}
+
+	var rejected []string
+	for _, name := range sent {
+		for _, unsupported := range resp.UnsupportedFiles {
+			if filepath.Base(unsupported) == filepath.Base(name) {
+				rejected = append(rejected, filepath.Base(name))
+				break
+			}
+		}
+	}
+	return rejected
 }
