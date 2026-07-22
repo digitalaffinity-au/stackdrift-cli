@@ -1,10 +1,13 @@
 package commands
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -275,4 +278,21 @@ func TestDeleteChosenGroups_DeletesOnlyTheSelected(t *testing.T) {
 
 func decodeJSON(r *http.Request, out any) error {
 	return json.NewDecoder(r.Body).Decode(out)
+}
+
+// captureOutput collects what a command prints to stdout.
+func captureOutput(fn func()) string {
+	original := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		return ""
+	}
+	os.Stdout = w
+	fn()
+	_ = w.Close()
+	os.Stdout = original
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	return buf.String()
 }

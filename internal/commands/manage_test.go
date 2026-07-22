@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/config"
@@ -133,5 +134,21 @@ func TestTrackedGroupNames_NilConfig_IsEmptyNotNil(t *testing.T) {
 	}
 	if len(names) != 0 {
 		t.Fatalf("expected no tracked groups, got %v", names)
+	}
+}
+
+func TestReportRemoved_NothingSelected_SaysSo(t *testing.T) {
+	out := captureOutput(func() { reportRemoved(0, "technologies") })
+
+	if !strings.Contains(out, "nothing selected") {
+		t.Fatalf("confirming with nothing selected must not look like success, got %q", out)
+	}
+}
+
+func TestReportRemoved_SomethingRemoved_ReportsTheCount(t *testing.T) {
+	out := captureOutput(func() { reportRemoved(3, "dependency groups") })
+
+	if !strings.Contains(out, "3 dependency groups removed") {
+		t.Fatalf("expected the count reported, got %q", out)
 	}
 }

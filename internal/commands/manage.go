@@ -70,6 +70,7 @@ func removeTechnologies(client *api.Client, dir string, cfg *config.ProjectConfi
 	if err != nil {
 		return err
 	}
+	reportRemoved(len(removed), "technologies")
 
 	cfg.Technologies = filterTech(cfg.Technologies, removed)
 	return config.SaveProject(dir, cfg)
@@ -107,6 +108,7 @@ func removeDependencyGroups(client *api.Client, dir string, cfg *config.ProjectC
 	if err != nil {
 		return err
 	}
+	reportRemoved(len(removed), "dependency groups")
 
 	cfg.DependencyGrp = filterGroups(cfg.DependencyGrp, removed)
 	return config.SaveProject(dir, cfg)
@@ -194,6 +196,16 @@ func filterGroups(groups []config.TrackedDependencyGroup, removed map[string]boo
 		}
 	}
 	return kept
+}
+
+// reportRemoved always says what happened. Confirming with nothing selected
+// used to print nothing at all, which reads exactly like a successful removal.
+func reportRemoved(count int, plural string) {
+	if count == 0 {
+		ui.Println("  nothing selected, no " + plural + " were removed")
+		return
+	}
+	ui.Printf("  %d %s removed\n", count, plural)
 }
 
 func baseName(dir string) string {
