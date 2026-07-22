@@ -58,8 +58,8 @@ func ToggleList(title string, items []Item) []Item {
 	}
 	enableVTInput()
 
-	cursor := 0
-	lines := renderList(title, items, cursor, false, 0)
+	cursor, top := 0, 0
+	lines := renderList(title, items, cursor, top, false, 0)
 	pending := make([]byte, 0, 16)
 	readBuf := make([]byte, 16)
 	for {
@@ -88,7 +88,9 @@ func ToggleList(title string, items []Item) []Item {
 			return items
 		}
 		if action != keyIgnore {
-			lines = renderList(title, items, cursor, true, lines)
+			_, height := terminalSize()
+			top = scrollTo(top, cursor, viewRows(len(items), height), len(items))
+			lines = renderList(title, items, cursor, top, true, lines)
 		}
 	}
 }
@@ -166,35 +168,64 @@ func applyKey(items []Item, cursor int, action keyAction) (int, bool, bool) {
 	return cursor, false, false
 }
 
-func renderList(title string, items []Item, cursor int, redraw bool, prevLines int) int {
+func renderList(title string, items []Item, cursor, top int, redraw bool, prevLines int) int {
+	width, height := terminalSize()
+	rows := viewRows(len(items), height)
+
 	var b strings.Builder
 	if redraw {
 		fmt.Fprintf(&b, "\x1b[%dA\x1b[J", prevLines)
 	}
 
-	b.WriteString(title + "\r\n")
-	for i, it := range items {
-		pointer := "  "
-		label := it.Label
+	writeRow(&b, title, width)
+	writeRow(&b, scrollMarker(top, 0, cDim+"  ↑ %d more above"+cReset), width)
+
+	for i := top; i < top+rows && i < len(items); i++ {
+		it := items[i]
+		pointer, box := "  ", "[ ]"
+		if it.Selected {
+			box = "[x]"
+		}
+
+		label, hint := fitLine(it.Label, it.Hint, width-len(pointer)-len(box)-1)
+		if it.Selected {
+			box = cGreen + box + cReset
+		}
 		if i == cursor {
 			pointer = cCyan + "> " + cReset
-			label = cCyan + it.Label + cReset
+			label = cCyan + label + cReset
 		}
-		box := "[ ]"
-		if it.Selected {
-			box = cGreen + "[x]" + cReset
-		}
+
 		line := pointer + box + " " + label
-		if it.Hint != "" {
-			line += "  " + cDim + it.Hint + cReset
+		if hint != "" {
+			line += "  " + cDim + hint + cReset
 		}
 		b.WriteString(line + "\r\n")
 	}
+
+	below := len(items) - (top + rows)
+	writeRow(&b, scrollMarker(below, 0, cDim+"  ↓ %d more below"+cReset), width)
 	b.WriteString("\r\n")
-	b.WriteString(cDim + "space toggle  a all  n none  i invert  enter confirm  up/down or j/k move  q cancel" + cReset + "\r\n")
+	writeRow(&b, cDim+"space toggle  a all  n none  i invert  enter confirm  j/k move  q cancel"+cReset, width)
 
 	fmt.Print(b.String())
-	return len(items) + 3
+	return rows + chromeLines
+}
+
+// scrollMarker returns an empty line rather than nothing when there is no
+// overflow, so the drawn block keeps a constant height and the cursor-up
+// redraw stays correct.
+func scrollMarker(count, threshold int, format string) string {
+	if count <= threshold {
+		return ""
+	}
+	return fmt.Sprintf(format, count)
+}
+
+// writeRow emits exactly one screen line. Anything wider than the terminal
+// would wrap onto a second line and desynchronise the redraw.
+func writeRow(b *strings.Builder, text string, width int) {
+	b.WriteString(clampWidth(text, width) + "\r\n")
 }
 
 func toggleListNumbered(title string, items []Item) []Item {
