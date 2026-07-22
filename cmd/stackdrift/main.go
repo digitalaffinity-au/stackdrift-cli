@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/commands"
@@ -16,7 +17,11 @@ type command struct {
 }
 
 func main() {
-	registry := map[string]command{
+	os.Exit(run(os.Args[1:], registry(), os.Stdout, os.Stderr))
+}
+
+func registry() map[string]command {
+	return map[string]command{
 		"login":   {commands.Login, "sign in through the StackDrift website"},
 		"logout":  {commands.Logout, "remove the saved credentials"},
 		"whoami":  {commands.Whoami, "show the signed in account"},
@@ -27,29 +32,32 @@ func main() {
 		"update":  {runUpdate, "download and install the latest release"},
 		"version": {showVersion, "print the CLI version"},
 	}
+}
 
-	if len(os.Args) < 2 {
-		usage(registry)
-		os.Exit(1)
+func run(args []string, registry map[string]command, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		usage(stdout, registry)
+		return 1
 	}
 
-	name := os.Args[1]
+	name := args[0]
 	if name == "help" || name == "-h" || name == "--help" {
-		usage(registry)
-		return
+		usage(stdout, registry)
+		return 0
 	}
 
 	cmd, ok := registry[name]
 	if !ok {
-		fmt.Fprintln(os.Stderr, "unknown command: "+name)
-		usage(registry)
-		os.Exit(1)
+		fmt.Fprintln(stderr, "unknown command: "+name)
+		usage(stdout, registry)
+		return 1
 	}
 
-	if err := cmd.run(os.Args[2:]); err != nil {
-		fmt.Fprintln(os.Stderr, "error: "+err.Error())
-		os.Exit(1)
+	if err := cmd.run(args[1:]); err != nil {
+		fmt.Fprintln(stderr, "error: "+err.Error())
+		return 1
 	}
+	return 0
 }
 
 func showVersion([]string) error {
@@ -61,16 +69,16 @@ func runUpdate(args []string) error {
 	return commands.Update(version, args)
 }
 
-func usage(registry map[string]command) {
-	fmt.Println("StackDrift CLI")
-	fmt.Println()
-	fmt.Println("Usage: stackdrift <command>")
-	fmt.Println()
-	fmt.Println("Commands:")
+func usage(out io.Writer, registry map[string]command) {
+	fmt.Fprintln(out, "StackDrift CLI")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Usage: stackdrift <command>")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Commands:")
 	order := []string{"login", "scan", "status", "check", "remove", "whoami", "logout", "update", "version"}
 	for _, name := range order {
-		fmt.Printf("  %-9s %s\n", name, registry[name].help)
+		fmt.Fprintf(out, "  %-9s %s\n", name, registry[name].help)
 	}
-	fmt.Println()
-	fmt.Println("Set STACKDRIFT_URL to point at a different server.")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Set STACKDRIFT_URL to point at a different server.")
 }

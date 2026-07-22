@@ -55,6 +55,9 @@ func Login(baseURL string) error {
 	return nil
 }
 
+// Swapped out in tests so the polling loop does not wait in real time.
+var sleep = time.Sleep
+
 func poll(client *api.Client, auth *api.DeviceAuthorization) (string, error) {
 	interval := time.Duration(auth.IntervalSeconds) * time.Second
 	if interval <= 0 {
@@ -67,7 +70,7 @@ func poll(client *api.Client, auth *api.DeviceAuthorization) (string, error) {
 			return "", errors.New("login timed out, please run login again")
 		}
 
-		time.Sleep(interval)
+		sleep(interval)
 
 		token, status, err := client.PollDeviceToken(auth.DeviceCode)
 		if err != nil {
