@@ -177,6 +177,94 @@ func TestLoadProject_SameProjectFromTwoDirectories_ResolvesForBoth(t *testing.T)
 	}
 }
 
+func TestLoadProject_TwoDirectoriesOnDifferentProjects_StayIndependent(t *testing.T) {
+	t.Setenv("STACKDRIFT_HOME", t.TempDir())
+
+	site, app := t.TempDir(), t.TempDir()
+	if err := SaveProject(site, &ProjectConfig{ProjectID: 21, ProjectName: "Site"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveProject(app, &ProjectConfig{ProjectID: 22, ProjectName: "App"}); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := LoadProject(site)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := LoadProject(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == nil || first.ProjectID != 21 {
+		t.Fatalf("expected site to stay on 21, got %+v", first)
+	}
+	if second == nil || second.ProjectID != 22 {
+		t.Fatalf("expected app to stay on 22, got %+v", second)
+	}
+}
+
+func TestSaveProject_DirectoryReassigned_ResolvesToTheNewProject(t *testing.T) {
+	t.Setenv("STACKDRIFT_HOME", t.TempDir())
+
+	dir := t.TempDir()
+	if err := SaveProject(dir, &ProjectConfig{ProjectID: 12, ProjectName: "Deleted"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveProject(dir, &ProjectConfig{ProjectID: 13, ProjectName: "Replacement"}); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded == nil || loaded.ProjectID != 13 {
+		t.Fatalf("expected the directory to resolve to 13, got %+v", loaded)
+	}
+
+	path, err := ProjectFilePath(12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("expected the abandoned link to be removed once it tracked nothing")
+	}
+}
+
+func TestSaveProject_ReassigningOneDirectory_LeavesTheOtherLinked(t *testing.T) {
+	t.Setenv("STACKDRIFT_HOME", t.TempDir())
+
+	kept, moved := t.TempDir(), t.TempDir()
+	shared := &ProjectConfig{ProjectID: 31, ProjectName: "Shared"}
+	if err := SaveProject(kept, shared); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveProject(moved, shared); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SaveProject(moved, &ProjectConfig{ProjectID: 32, ProjectName: "Other"}); err != nil {
+		t.Fatal(err)
+	}
+
+	stillShared, err := LoadProject(kept)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stillShared == nil || stillShared.ProjectID != 31 {
+		t.Fatalf("expected the untouched directory to stay on 31, got %+v", stillShared)
+	}
+
+	reassigned, err := LoadProject(moved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reassigned == nil || reassigned.ProjectID != 32 {
+		t.Fatalf("expected the reassigned directory on 32, got %+v", reassigned)
+	}
+}
+
 func TestLoadProject_UnrelatedDirectory_DoesNotMatchAnotherProject(t *testing.T) {
 	t.Setenv("STACKDRIFT_HOME", t.TempDir())
 

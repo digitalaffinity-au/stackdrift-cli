@@ -88,12 +88,24 @@ func SaveProject(dir string, cfg *ProjectConfig) error {
 	if cfg.DependencyGrp == nil {
 		cfg.DependencyGrp = []TrackedDependencyGroup{}
 	}
-	cfg.addPath(absolutePath(dir))
+	dir = absolutePath(dir)
+	cfg.addPath(dir)
+
+	// A directory belongs to one project, so claiming it here releases it from
+	// whichever project held it before. Without this a directory reassigned to
+	// a new project keeps resolving to the old one.
+	if err := releasePath(dir, cfg.ProjectID); err != nil {
+		return err
+	}
 
 	path, err := ProjectFilePath(cfg.ProjectID)
 	if err != nil {
 		return err
 	}
+	return writeProjectFile(path, cfg)
+}
+
+func writeProjectFile(path string, cfg *ProjectConfig) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -103,6 +115,8 @@ func SaveProject(dir string, cfg *ProjectConfig) error {
 		return err
 	}
 
+	// The link names a project and every technology version tracked for it, so
+	// it stays readable only by the user who scanned.
 	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
@@ -138,6 +152,47 @@ func findLinked(dir string) (*ProjectConfig, error) {
 		}
 	}
 	return nil, nil
+}
+
+// releasePath drops dir from every stored project except keepID, removing a
+// link entirely once it tracks no directories.
+func releasePath(dir string, keepID int) error {
+	store, err := StoreDir()
+	if err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(store)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == strconv.Itoa(keepID) {
+			continue
+		}
+
+		linkDir := filepath.Join(store, entry.Name())
+		cfg, err := readProjectFile(filepath.Join(linkDir, ProjectFileName))
+		if err != nil || cfg == nil || !cfg.linkedTo(dir) {
+			continue
+		}
+
+		cfg.removePath(dir)
+		if len(cfg.Paths) == 0 {
+			if err := os.RemoveAll(linkDir); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := writeProjectFile(filepath.Join(linkDir, ProjectFileName), cfg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateLegacy(dir string) (*ProjectConfig, error) {
@@ -192,6 +247,16 @@ func (c *ProjectConfig) addPath(dir string) {
 		return
 	}
 	c.Paths = append(c.Paths, dir)
+}
+
+func (c *ProjectConfig) removePath(dir string) {
+	kept := c.Paths[:0]
+	for _, path := range c.Paths {
+		if !samePath(path, dir) {
+			kept = append(kept, path)
+		}
+	}
+	c.Paths = kept
 }
 
 func absolutePath(dir string) string {
