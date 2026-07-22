@@ -51,7 +51,8 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 	// server holds decides what is tracked. Without this a technology removed
 	// there stays listed locally, is shown as already tracked, and is silently
 	// skipped instead of being added back.
-	if err := reconcileTracked(client, project, cfg); err != nil {
+	deps, err := reconcileTracked(client, project, cfg)
+	if err != nil {
 		return err
 	}
 
@@ -77,6 +78,7 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 	}
 
 	saveConfig := func() error { return config.SaveProject(dir, cfg) }
+	before := len(cfg.Technologies) + len(cfg.DependencyGrp)
 
 	if err := applyTechnologies(client, project.ID, result.Technologies, chosenTechs, cfg, saveConfig); err != nil {
 		return err
@@ -85,12 +87,32 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 		return err
 	}
 
+	// Unticking something that is tracked removes it from the project. This is
+	// skipped for --yes so an unattended run can only ever add, which keeps a
+	// CI scan from deleting anything.
+	removed := 0
+	if !assumeYes {
+		techsRemoved, err := removeUncheckedTechnologies(client, project.Technologies, result.Technologies, chosenTechs, cfg, saveConfig)
+		if err != nil {
+			return err
+		}
+		groupsRemoved, err := removeUncheckedGroups(client, deps.Groups, dir, primaries, chosenManifests, cfg, saveConfig)
+		if err != nil {
+			return err
+		}
+		removed = techsRemoved + groupsRemoved
+	}
+
 	if err := config.SaveProject(dir, cfg); err != nil {
 		return err
 	}
 
 	ui.Println()
-	ui.Println("Linked this directory to project '" + project.Name + "' and updated it.")
+	if added := len(cfg.Technologies) + len(cfg.DependencyGrp) + removed - before; added == 0 && removed == 0 {
+		ui.Println("No changes. Project '" + project.Name + "' already matches this directory.")
+	} else {
+		ui.Printf("Project '%s' updated: %d added, %d removed.\n", project.Name, added, removed)
+	}
 	if path, err := config.ProjectFilePath(project.ID); err == nil {
 		ui.Println("Link saved to " + path)
 	}

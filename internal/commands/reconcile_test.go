@@ -9,6 +9,7 @@ import (
 
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/api"
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/config"
+	"github.com/digitalaffinity-au/stackdrift-cli/internal/detect"
 )
 
 func TestTrackedFromServer_RemovedTechnology_IsNoLongerTracked(t *testing.T) {
@@ -158,5 +159,113 @@ func TestScan_TechnologyStillOnTheWebsite_IsNotDuplicated(t *testing.T) {
 
 	if len(added) != 0 {
 		t.Fatalf("the server already has it, expected no second copy, got %+v", added)
+	}
+}
+
+func TestRemoveUncheckedTechnologies_UntickedTrackedItem_IsDeleted(t *testing.T) {
+	var deleted []string
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		deleted = append(deleted, r.Method+" "+r.URL.Path)
+	})
+
+	server := []api.Technology{{ID: 47, Name: ".NET Core SDK", Version: "8.0"}}
+	detected := []detect.Technology{{Name: ".NET Core SDK", Version: "8.0"}}
+	cfg := &config.ProjectConfig{
+		ProjectID:    2,
+		Technologies: []config.TrackedTechnology{{ID: 47, Name: ".NET Core SDK", Version: "8.0"}},
+	}
+
+	count, err := removeUncheckedTechnologies(client, server, detected, selected(1), cfg, func() error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if count != 1 || len(deleted) != 1 || !strings.Contains(deleted[0], "/api/technologies/47") {
+		t.Fatalf("expected the unticked technology deleted, got %v", deleted)
+	}
+	if len(cfg.Technologies) != 0 {
+		t.Fatalf("expected it dropped from the link, got %+v", cfg.Technologies)
+	}
+}
+
+func TestRemoveUncheckedTechnologies_StillTicked_IsKept(t *testing.T) {
+	called := false
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) { called = true })
+
+	server := []api.Technology{{ID: 47, Name: ".NET Core SDK", Version: "8.0"}}
+	detected := []detect.Technology{{Name: ".NET Core SDK", Version: "8.0"}}
+
+	count, err := removeUncheckedTechnologies(client, server, detected, selected(1, 0), &config.ProjectConfig{}, func() error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called || count != 0 {
+		t.Fatal("a ticked technology must not be removed")
+	}
+}
+
+func TestRemoveUncheckedTechnologies_UntrackedItem_IsNotDeleted(t *testing.T) {
+	called := false
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) { called = true })
+
+	// Detected but never tracked, so unticking it removes nothing.
+	detected := []detect.Technology{{Name: "Linux Mint", Version: "22"}}
+
+	count, err := removeUncheckedTechnologies(client, nil, detected, selected(1), &config.ProjectConfig{}, func() error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called || count != 0 {
+		t.Fatal("an untracked detection must not cause a delete")
+	}
+}
+
+func TestRemoveUncheckedGroups_UntickedTrackedGroup_IsDeleted(t *testing.T) {
+	var deleted []string
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		deleted = append(deleted, r.URL.Path)
+	})
+
+	server := []api.DependencyGroupInfo{{ID: 11, Name: "App"}}
+	primaries := []detect.Manifest{{Ecosystem: "NuGet", FileName: "App.csproj", Path: "/proj/App.csproj", Primary: true}}
+	cfg := &config.ProjectConfig{DependencyGrp: []config.TrackedDependencyGroup{{Name: "App"}}}
+
+	count, err := removeUncheckedGroups(client, server, "/proj", primaries, selected(1), cfg, func() error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 || len(deleted) != 1 || !strings.Contains(deleted[0], "/api/dependencies/groups/11") {
+		t.Fatalf("expected the unticked group deleted, got %v", deleted)
+	}
+	if len(cfg.DependencyGrp) != 0 {
+		t.Fatalf("expected it dropped from the link, got %+v", cfg.DependencyGrp)
+	}
+}
+
+func TestScan_WithYes_NeverRemovesAnything(t *testing.T) {
+	var deleted []string
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleted = append(deleted, r.URL.Path)
+		}
+		if strings.HasSuffix(r.URL.Path, "/dependencies") && r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`{"groups":[],"totalCount":0}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":7,"name":"Demo","technologies":[{"id":9,"name":"Laravel","version":"11","category":"Framework"}]}`))
+	})
+
+	t.Setenv("STACKDRIFT_HOME", t.TempDir())
+	dir := t.TempDir()
+	writeFile(t, dir, "README.md", "no laravel here anymore")
+	if err := config.SaveProject(dir, &config.ProjectConfig{ProjectID: 7, ProjectName: "Demo"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// An unattended run must be add-only, so CI can never delete tracked data.
+	_ = scan(client, dir, true)
+
+	if len(deleted) != 0 {
+		t.Fatalf("--yes must never delete, got %v", deleted)
 	}
 }

@@ -9,15 +9,15 @@ import (
 // actually holds on the server, in both directions. Dropping entries the
 // server no longer has lets them be added back; keeping entries it does have
 // stops them being added a second time.
-func reconcileTracked(client *api.Client, project *api.Project, cfg *config.ProjectConfig) error {
+func reconcileTracked(client *api.Client, project *api.Project, cfg *config.ProjectConfig) (*api.DependencySummary, error) {
 	cfg.Technologies = trackedFromServer(project.Technologies)
 
 	deps, err := client.GetDependencies(project.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cfg.DependencyGrp = mergeGroups(deps.Groups, cfg.DependencyGrp)
-	return nil
+	return deps, nil
 }
 
 // trackedFromServer rebuilds the technology list outright, since the server
