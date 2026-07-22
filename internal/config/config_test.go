@@ -157,12 +157,13 @@ func TestLoadProject_SameProjectFromTwoDirectories_ResolvesForBoth(t *testing.T)
 	t.Setenv("STACKDRIFT_HOME", t.TempDir())
 
 	first, second := t.TempDir(), t.TempDir()
-	cfg := &ProjectConfig{ProjectID: 11, ProjectName: "Shared"}
 
-	if err := SaveProject(first, cfg); err != nil {
+	// Scan builds a fresh config for a directory it has not seen, so each save
+	// must arrive with its own object rather than a shared one.
+	if err := SaveProject(first, &ProjectConfig{ProjectID: 11, ProjectName: "Shared"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveProject(second, cfg); err != nil {
+	if err := SaveProject(second, &ProjectConfig{ProjectID: 11, ProjectName: "Shared"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -236,11 +237,10 @@ func TestSaveProject_ReassigningOneDirectory_LeavesTheOtherLinked(t *testing.T) 
 	t.Setenv("STACKDRIFT_HOME", t.TempDir())
 
 	kept, moved := t.TempDir(), t.TempDir()
-	shared := &ProjectConfig{ProjectID: 31, ProjectName: "Shared"}
-	if err := SaveProject(kept, shared); err != nil {
+	if err := SaveProject(kept, &ProjectConfig{ProjectID: 31, ProjectName: "Shared"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveProject(moved, shared); err != nil {
+	if err := SaveProject(moved, &ProjectConfig{ProjectID: 31, ProjectName: "Shared"}); err != nil {
 		t.Fatal(err)
 	}
 

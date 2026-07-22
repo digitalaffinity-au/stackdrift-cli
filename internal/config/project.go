@@ -89,6 +89,20 @@ func SaveProject(dir string, cfg *ProjectConfig) error {
 		cfg.DependencyGrp = []TrackedDependencyGroup{}
 	}
 	dir = absolutePath(dir)
+
+	path, err := ProjectFilePath(cfg.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	// Scanning a second directory for an existing project arrives here with a
+	// freshly built config, so the directories already linked to that project
+	// are merged back in rather than overwritten.
+	if stored, err := readProjectFile(path); err == nil && stored != nil {
+		for _, existing := range stored.Paths {
+			cfg.addPath(existing)
+		}
+	}
 	cfg.addPath(dir)
 
 	// A directory belongs to one project, so claiming it here releases it from
@@ -98,10 +112,6 @@ func SaveProject(dir string, cfg *ProjectConfig) error {
 		return err
 	}
 
-	path, err := ProjectFilePath(cfg.ProjectID)
-	if err != nil {
-		return err
-	}
 	return writeProjectFile(path, cfg)
 }
 
