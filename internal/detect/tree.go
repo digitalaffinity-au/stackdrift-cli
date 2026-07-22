@@ -16,7 +16,7 @@ func scanTree(root string, result *Result) error {
 		}
 
 		if d.IsDir() {
-			if path != root && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".") || isWordPressUploads(path)) {
+			if path != root && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".") || isWordPressUploads(path) || isVendorDir(path)) {
 				return filepath.SkipDir
 			}
 			return nil
