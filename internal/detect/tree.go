@@ -36,6 +36,10 @@ func scanTree(root string, result *Result) error {
 			addManifest(result, "Npm", path, name, false)
 		case lower == "packages.lock.json":
 			addManifest(result, "NuGet", path, name, false)
+		// Old style .NET Framework projects keep their packages here rather
+		// than in the csproj, which lists only assembly references.
+		case lower == "packages.config":
+			addManifest(result, "NuGet", path, name, false)
 		case lower == "directory.packages.props":
 			addManifest(result, "NuGet", path, name, false)
 		case strings.HasSuffix(lower, ".csproj"):

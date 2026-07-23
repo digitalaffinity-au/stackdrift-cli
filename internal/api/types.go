@@ -64,6 +64,7 @@ type DependencySummary struct {
 type UploadManifestsResponse struct {
 	Summary          DependencySummary `json:"summary"`
 	UnsupportedFiles []string          `json:"unsupportedFiles"`
+	EmptyFiles       []string          `json:"emptyFiles"`
 }
 
 type ProjectStats struct {

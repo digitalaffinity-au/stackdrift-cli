@@ -141,15 +141,22 @@ func applyManifests(client *api.Client, projectID int, dir string, primaries, al
 			return err
 		}
 
-		// The server answers 200 even when it could not read a file, so
+		// The server answers 200 even when a file produced nothing, so
 		// reporting the upload without checking this claims success for a
 		// group that was never created.
-		if rejected := rejectedFiles(resp, names); len(rejected) > 0 {
-			ui.Println("  WARNING " + groupName + ": the server could not read " + strings.Join(rejected, ", "))
-			if len(rejected) == len(names) {
-				ui.Println("           nothing was tracked for this project")
-				continue
-			}
+		unreadable := matchFiles(resp.UnsupportedFiles, names)
+		empty := matchFiles(resp.EmptyFiles, names)
+
+		if len(unreadable) > 0 {
+			ui.Println("  WARNING " + groupName + ": the server could not read " + strings.Join(unreadable, ", "))
+		}
+		if len(empty) > 0 {
+			ui.Println("  WARNING " + groupName + ": no " + ecosystemLabel(primary.Ecosystem) +
+				" packages are declared in " + strings.Join(empty, ", "))
+		}
+		if len(unreadable)+len(empty) == len(names) {
+			ui.Println("           nothing was tracked for this project")
+			continue
 		}
 
 		cfg.DependencyGrp = append(cfg.DependencyGrp, config.TrackedDependencyGroup{
@@ -237,21 +244,21 @@ func ecosystemLabel(ecosystem string) string {
 	return ecosystem
 }
 
-// rejectedFiles reports which of the uploaded files the server said it could
-// not read, matched by base name since the server echoes what it was sent.
-func rejectedFiles(resp *api.UploadManifestsResponse, sent []string) []string {
-	if resp == nil || len(resp.UnsupportedFiles) == 0 {
+// matchFiles reports which of the uploaded files the server named in one of its
+// reject lists, matched by base name since the server echoes what it was sent.
+func matchFiles(reported, sent []string) []string {
+	if len(reported) == 0 {
 		return nil
 	}
 
-	var rejected []string
+	var matched []string
 	for _, name := range sent {
-		for _, unsupported := range resp.UnsupportedFiles {
-			if filepath.Base(unsupported) == filepath.Base(name) {
-				rejected = append(rejected, filepath.Base(name))
+		for _, candidate := range reported {
+			if filepath.Base(candidate) == filepath.Base(name) {
+				matched = append(matched, filepath.Base(name))
 				break
 			}
 		}
 	}
-	return rejected
+	return matched
 }

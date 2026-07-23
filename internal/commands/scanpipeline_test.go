@@ -306,3 +306,52 @@ func TestApplyManifests_PartialRejection_StillTracksTheGroup(t *testing.T) {
 		t.Fatalf("expected the group still tracked, got %+v", cfg.DependencyGrp)
 	}
 }
+
+func TestApplyManifests_FileDeclaresNothing_SaysSoRatherThanBlamingTheServer(t *testing.T) {
+	// An old style csproj reads perfectly and simply has no PackageReference.
+	// Calling that unreadable sends the user hunting for a corrupt file.
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"summary":{"totalCount":0,"groups":[]},"unsupportedFiles":[],"emptyFiles":["Caterex.Data.csproj"]}`))
+	})
+
+	all := []detect.Manifest{
+		{Ecosystem: "NuGet", FileName: "Caterex.Data.csproj", Path: "/p/Caterex.Data.csproj", Content: "<Project/>", Primary: true},
+	}
+	cfg := &config.ProjectConfig{ProjectID: 1}
+
+	out := captureOutput(func() {
+		_ = applyManifests(client, 1, "/p", all, all, selected(1, 0), cfg, func() error { return nil })
+	})
+
+	if strings.Contains(out, "could not read") {
+		t.Fatalf("the server read it fine, expected no read failure claimed, got %q", out)
+	}
+	if !strings.Contains(out, "no NuGet packages are declared") {
+		t.Fatalf("expected the real reason reported, got %q", out)
+	}
+	if len(cfg.DependencyGrp) != 0 {
+		t.Fatalf("a group the server never created must not be tracked, got %+v", cfg.DependencyGrp)
+	}
+}
+
+func TestApplyManifests_EmptyPrimaryButUsableLock_StillTracksTheGroup(t *testing.T) {
+	// This is the old style project once packages.config rides along: the
+	// csproj declares nothing but the group is real, so it must be tracked.
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"summary":{"totalCount":4,"groups":[]},"unsupportedFiles":[],"emptyFiles":["Caterex.Data.csproj"]}`))
+	})
+
+	all := []detect.Manifest{
+		{Ecosystem: "NuGet", FileName: "Caterex.Data.csproj", Path: "/p/Caterex.Data.csproj", Content: "<Project/>", Primary: true},
+		{Ecosystem: "NuGet", FileName: "packages.config", Path: "/p/packages.config", Content: "<packages/>"},
+	}
+	cfg := &config.ProjectConfig{ProjectID: 1}
+
+	captureOutput(func() {
+		_ = applyManifests(client, 1, "/p", all[:1], all, selected(1, 0), cfg, func() error { return nil })
+	})
+
+	if len(cfg.DependencyGrp) != 1 {
+		t.Fatalf("expected the group tracked, got %+v", cfg.DependencyGrp)
+	}
+}

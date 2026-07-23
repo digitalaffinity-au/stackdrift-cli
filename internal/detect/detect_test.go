@@ -283,3 +283,25 @@ func TestIsHostSource(t *testing.T) {
 		t.Fatal("project sources must not count as host")
 	}
 }
+
+func TestScan_PackagesConfig_DetectedAsNuGetSupportingFile(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "Caterex.Data.csproj", `<Project ToolsVersion="15.0"><PropertyGroup><TargetFrameworkVersion>v4.8</TargetFrameworkVersion></PropertyGroup></Project>`)
+	write(t, dir, "packages.config", `<packages><package id="Newtonsoft.Json" version="13.0.3" /></packages>`)
+
+	result, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !hasManifest(result.Manifests, "packages.config", "NuGet") {
+		t.Fatal("expected packages.config detected as a NuGet manifest")
+	}
+	for _, m := range result.Manifests {
+		// It must not be primary, or an old style project would upload twice:
+		// once as its csproj group and once as a group of its own.
+		if m.FileName == "packages.config" && m.Primary {
+			t.Fatal("packages.config must ride along with the csproj, not form its own group")
+		}
+	}
+}
