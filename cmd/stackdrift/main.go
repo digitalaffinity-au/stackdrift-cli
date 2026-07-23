@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/digitalaffinity-au/stackdrift-cli/internal/api"
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/commands"
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/config"
 )
@@ -20,6 +21,9 @@ type command struct {
 }
 
 func main() {
+	// The server refuses a build behind the current release, so it has to know
+	// which one is calling.
+	api.Version = version
 	os.Exit(run(os.Args[1:], registry(), os.Stdout, os.Stderr))
 }
 
@@ -72,10 +76,18 @@ func run(args []string, registry map[string]command, stdout, stderr io.Writer) i
 		return 1
 	}
 
+	err := cmd.run(args[1:])
+
+	// Being behind is the one failure the same binary can never retry its way
+	// out of, so it updates itself and runs the command again.
+	if api.IsUpgradeRequired(err) && !alreadyUpgraded() {
+		return upgradeAndRerun(args, stdout, stderr, err)
+	}
+
 	// A token can be revoked between the startup check and any call that
 	// follows it, so every command's failure goes through the same reading of
 	// a rejection rather than reporting it as a plain request error.
-	if err := commands.ExpireSession(cmd.run(args[1:])); err != nil {
+	if err := commands.ExpireSession(err); err != nil {
 		fmt.Fprintln(stderr, "error: "+err.Error())
 		return 1
 	}

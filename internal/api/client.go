@@ -11,6 +11,14 @@ import (
 	"time"
 )
 
+// VersionHeader tells the server which build is calling. The server turns away
+// anything behind the current release, so a build that does not send this is
+// read as predating the check and refused with it.
+const VersionHeader = "X-StackDrift-CLI-Version"
+
+// Set from main at startup, where the release version is stamped in.
+var Version = "dev"
+
 type Client struct {
 	baseURL string
 	token   string
@@ -27,6 +35,13 @@ func (e *Error) Error() string {
 		return e.Message
 	}
 	return fmt.Sprintf("request failed with status %d", e.Status)
+}
+
+// IsUpgradeRequired reports whether the server refused the build itself rather
+// than anything about the request, which no retry of the same binary can fix.
+func IsUpgradeRequired(err error) bool {
+	var apiErr *Error
+	return errors.As(err, &apiErr) && apiErr.Status == http.StatusUpgradeRequired
 }
 
 // IsUnauthorized reports whether the server rejected the token outright. Note
@@ -66,6 +81,7 @@ func (c *Client) do(method, path string, body any, out any) error {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set(VersionHeader, Version)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
