@@ -21,16 +21,9 @@ func Logout([]string) error {
 }
 
 func Whoami([]string) error {
-	client, _, err := authenticatedClient()
+	_, _, me, err := authenticatedSession()
 	if err != nil {
 		return err
-	}
-	me, err := client.Me()
-	if err != nil {
-		return err
-	}
-	if !me.Authenticated {
-		return errNotSignedIn
 	}
 	fmt.Println("Signed in as " + me.Email)
 	return nil

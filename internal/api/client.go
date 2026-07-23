@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +27,14 @@ func (e *Error) Error() string {
 		return e.Message
 	}
 	return fmt.Sprintf("request failed with status %d", e.Status)
+}
+
+// IsUnauthorized reports whether the server rejected the token outright. Note
+// that /api/auth/me is anonymous and answers 200 with Authenticated false
+// instead, so a session check has to read that flag rather than call this.
+func IsUnauthorized(err error) bool {
+	var apiErr *Error
+	return errors.As(err, &apiErr) && apiErr.Status == http.StatusUnauthorized
 }
 
 func New(baseURL, token string) *Client {

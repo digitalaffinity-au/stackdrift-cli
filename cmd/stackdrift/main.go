@@ -72,7 +72,10 @@ func run(args []string, registry map[string]command, stdout, stderr io.Writer) i
 		return 1
 	}
 
-	if err := cmd.run(args[1:]); err != nil {
+	// A token can be revoked between the startup check and any call that
+	// follows it, so every command's failure goes through the same reading of
+	// a rejection rather than reporting it as a plain request error.
+	if err := commands.ExpireSession(cmd.run(args[1:])); err != nil {
 		fmt.Fprintln(stderr, "error: "+err.Error())
 		return 1
 	}

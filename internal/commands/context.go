@@ -18,13 +18,27 @@ func isNotFound(err error) bool {
 }
 
 func authenticatedClient() (*api.Client, string, error) {
+	client, baseURL, _, err := authenticatedSession()
+	return client, baseURL, err
+}
+
+// Returns the account alongside the client so a command that needs it does not
+// pay for a second round trip to ask again.
+func authenticatedSession() (*api.Client, string, *api.Me, error) {
 	baseURL := config.BaseURL()
 	cred, err := config.LoadCredential(baseURL)
 	if err != nil {
-		return nil, baseURL, err
+		return nil, baseURL, nil, err
 	}
 	if cred == nil || cred.Token == "" {
-		return nil, baseURL, errNotSignedIn
+		return nil, baseURL, nil, errNotSignedIn
 	}
-	return api.New(baseURL, cred.Token), baseURL, nil
+
+	client := api.New(baseURL, cred.Token)
+	me, err := validateSession(client, baseURL)
+	if err != nil {
+		return nil, baseURL, nil, err
+	}
+
+	return client, baseURL, me, nil
 }
