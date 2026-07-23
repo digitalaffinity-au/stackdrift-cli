@@ -17,30 +17,44 @@ var wpVersionRe = regexp.MustCompile(`\$wp_version\s*=\s*['"]([^'"]+)['"]`)
 func detectWordPress(result *Result, root, path string) {
 	core := filepath.Dir(filepath.Dir(path))
 
-	if !isDir(filepath.Join(core, "wp-admin")) {
-		return
-	}
 	// Core is never legitimately installed inside another install's content
 	// directory, so anything under one is a backup or a test fixture.
 	if hasAncestor(root, core, "wp-content") {
 		return
 	}
 
-	content, ok := readCapped(path)
+	version, ok := wordPressAt(path)
 	if !ok {
-		return
-	}
-	match := wpVersionRe.FindStringSubmatch(content)
-	if match == nil {
 		return
 	}
 
 	result.Technologies = append(result.Technologies, Technology{
 		Name:     "WordPress",
-		Version:  cleanVersion(match[1]),
+		Version:  version,
 		Category: "Framework",
 		Source:   wordPressSource(root, core),
 	})
+}
+
+// wordPressAt reads the version out of a wp-includes/version.php, confirming
+// first that it belongs to a real install rather than a stray copy of the file.
+func wordPressAt(versionFile string) (string, bool) {
+	core := filepath.Dir(filepath.Dir(versionFile))
+	if !isDir(filepath.Join(core, "wp-admin")) {
+		return "", false
+	}
+
+	content, ok := readCapped(versionFile)
+	if !ok {
+		return "", false
+	}
+
+	match := wpVersionRe.FindStringSubmatch(content)
+	if match == nil {
+		return "", false
+	}
+
+	return cleanVersion(match[1]), true
 }
 
 func isWordPressVersionFile(path, name string) bool {

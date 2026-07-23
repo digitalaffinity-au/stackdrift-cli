@@ -1,5 +1,7 @@
 package detect
 
+import "strings"
+
 type Technology struct {
 	Name     string
 	Version  string
@@ -12,6 +14,10 @@ const (
 	SourceOsRelease = "/etc/os-release"
 	SourceHostKern  = "host kernel"
 	SourceHost      = "host"
+	// Prefixes a path found on the machine rather than inside the scanned
+	// directory, so the hint still names the install while the entry is still
+	// treated as a host detection.
+	SourceHostPrefix = "host: "
 )
 
 func IsHostSource(source string) bool {
@@ -19,7 +25,7 @@ func IsHostSource(source string) bool {
 	case SourceOsRelease, SourceHostKern, SourceHost:
 		return true
 	default:
-		return false
+		return strings.HasPrefix(source, SourceHostPrefix)
 	}
 }
 
@@ -55,16 +61,16 @@ func Scan(root string) (*Result, error) {
 	return ScanWithProgress(root, nil)
 }
 
-// ScanWithProgress reads the host first because that part is instant, then calls
-// onHostDone before walking the tree, which is the slow part and the one that goes
-// looking for WordPress and the like. Without that hook the caller has nothing to
-// say while a large directory is being walked and the scan looks hung.
+// ScanWithProgress reads the OS and kernel first because that part is instant,
+// then calls onHostDone before the two slow parts: searching the machine's web
+// roots and walking the scanned directory. Without that hook the caller has
+// nothing to say while they run and the scan looks hung.
 //
-// Host detection runs first but its technologies are appended LAST, so a tree
-// detection still wins the dedupe exactly as it did when the walk ran first. That
-// matters because the source decides whether an entry defaults to selected: a
-// Dockerfile-declared Ubuntu must not turn into a host detection just because the
-// order of work changed.
+// Technologies are appended tree first, then web roots, then host, so a detection
+// made inside the scanned directory keeps winning the dedupe. That matters
+// because the source decides whether an entry defaults to selected: a WordPress
+// install in the directory being scanned is the project, whereas the same
+// install found under a web root describes the machine.
 func ScanWithProgress(root string, onHostDone func()) (*Result, error) {
 	host := &Result{}
 	scanHost(host)
@@ -73,17 +79,22 @@ func ScanWithProgress(root string, onHostDone func()) (*Result, error) {
 		onHostDone()
 	}
 
+	web := &Result{}
+	scanWebRoots(web)
+
 	tree := &Result{}
 	if err := scanTree(root, tree); err != nil {
 		return nil, err
 	}
 
+	technologies := append(tree.Technologies, web.Technologies...)
+	technologies = append(technologies, host.Technologies...)
+
 	result := &Result{
-		Technologies: append(tree.Technologies, host.Technologies...),
+		Technologies: dedupeTechnologies(technologies),
 		Manifests:    tree.Manifests,
 	}
 
-	result.Technologies = dedupeTechnologies(result.Technologies)
 	return result, nil
 }
 
