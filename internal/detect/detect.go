@@ -61,6 +61,16 @@ func Scan(root string) (*Result, error) {
 	return ScanWithProgress(root, nil)
 }
 
+// Dedupe puts two detections of the same thing onto one row. It has to run again
+// after versions are resolved to catalog lines, because resolution is what makes
+// two differently worded detections identical: two composer constraints under one
+// major, or the same site found both in the scanned directory and under a web
+// root. Two rows sharing a name and version also share a tracking key, so
+// unticking one of them would delete the technology the other still represents.
+func Dedupe(result *Result) {
+	result.Technologies = dedupeTechnologies(result.Technologies)
+}
+
 // ScanWithProgress reads the OS and kernel first because that part is instant,
 // then calls onHostDone before the two slow parts: searching the machine's web
 // roots and walking the scanned directory. Without that hook the caller has
@@ -98,15 +108,24 @@ func ScanWithProgress(root string, onHostDone func()) (*Result, error) {
 	return result, nil
 }
 
+// dedupeTechnologies keeps the first entry for a name and version, because the
+// earlier one describes the scanned directory and the later one only the machine.
+// The exact build is the exception: whichever detection knows it wins, since a
+// Dockerfile naming the host's own release would otherwise shadow the
+// /etc/os-release entry and silently drop the running kernel, and the same
+// applies to a WordPress install reached both ways.
 func dedupeTechnologies(techs []Technology) []Technology {
-	seen := make(map[string]bool)
+	at := make(map[string]int)
 	out := make([]Technology, 0, len(techs))
 	for _, t := range techs {
 		key := t.Name + "|" + t.Version
-		if seen[key] {
+		if i, seen := at[key]; seen {
+			if out[i].Kernel == "" {
+				out[i].Kernel = t.Kernel
+			}
 			continue
 		}
-		seen[key] = true
+		at[key] = len(out)
 		out = append(out, t)
 	}
 	return out

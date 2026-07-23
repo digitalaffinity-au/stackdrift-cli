@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/api"
+	"github.com/digitalaffinity-au/stackdrift-cli/internal/config"
 	"github.com/digitalaffinity-au/stackdrift-cli/internal/detect"
 )
 
@@ -18,8 +19,18 @@ import (
 // Only the version is adjusted. Whether a build is known is the detector's
 // business: version.php reports the exact build a site runs, while a composer
 // constraint or a target framework only ever names the line.
-func resolveVersionLines(client *api.Client, result *detect.Result) {
+func resolveVersionLines(client *api.Client, result *detect.Result, tracked []config.TrackedTechnology) {
 	known := make(map[string][]string)
+	lookup := func(name string) []string {
+		versions, looked := known[name]
+		if !looked {
+			// A lookup failure must not fail the scan. Leaving the detected
+			// version alone is the same behaviour as before this existed.
+			versions, _ = client.GetVersions(name)
+			known[name] = versions
+		}
+		return versions
+	}
 
 	for i := range result.Technologies {
 		tech := &result.Technologies[i]
@@ -27,18 +38,32 @@ func resolveVersionLines(client *api.Client, result *detect.Result) {
 			continue
 		}
 
-		versions, looked := known[tech.Name]
-		if !looked {
-			// A lookup failure must not fail the scan. Leaving the detected
-			// version alone is the same behaviour as before this existed.
-			versions, _ = client.GetVersions(tech.Name)
-			known[tech.Name] = versions
-		}
-
-		if line := matchVersionLine(tech.Version, versions); line != "" {
+		if line := matchVersionLine(tech.Version, lookup(tech.Name)); line != "" {
 			tech.Version = line
 		}
 	}
+
+	// A project tracked by an older CLI holds the unresolved version, so
+	// "Laravel 11.0" would no longer match the "Laravel 11" now being detected.
+	// It would then read as untracked, show unticked, and adding it back would
+	// create a second row for the same technology. Resolving the tracked side
+	// the same way keeps the two in step. Only the key is rewritten; the
+	// recorded id is untouched, so removal and kernel updates still address the
+	// right server row.
+	for i := range tracked {
+		entry := &tracked[i]
+		if entry.Version == "" {
+			continue
+		}
+
+		if line := matchVersionLine(entry.Version, lookup(entry.Name)); line != "" {
+			entry.Version = line
+		}
+	}
+
+	// Resolution is what makes two detections identical, so the merge has to
+	// happen after it rather than only inside the scan.
+	detect.Dedupe(result)
 }
 
 // matchVersionLine mirrors how the server matches a version to a release: an

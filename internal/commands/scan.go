@@ -49,11 +49,6 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 		return nil
 	}
 
-	// Detection reports what the files say, which is not always the granularity
-	// the catalog tracks releases at, so the line is settled before anything is
-	// shown or sent.
-	resolveVersionLines(client, result)
-
 	cfg := configFor(project, existing)
 
 	// The project can be edited on the website between scans, so what the
@@ -64,6 +59,12 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 	if err != nil {
 		return err
 	}
+
+	// Detection reports what the files say, which is not always the granularity
+	// the catalog tracks releases at, so the line is settled before anything is
+	// shown or sent. This runs after reconcile because the tracked side has to
+	// be resolved with it, or a project recorded by an older CLI stops matching.
+	resolveVersionLines(client, result, cfg.Technologies)
 
 	primaries := primaryManifests(result)
 	techItems := technologyItems(result, cfg)

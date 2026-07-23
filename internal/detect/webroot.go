@@ -74,7 +74,7 @@ func searchWebRoot(result *Result, root string) {
 
 		if !d.IsDir() {
 			if isWordPressVersionFile(path, d.Name()) {
-				addWebRootWordPress(result, path)
+				addWebRootWordPress(result, root, path)
 			}
 			return nil
 		}
@@ -96,15 +96,30 @@ func searchWebRoot(result *Result, root string) {
 	})
 }
 
-func addWebRootWordPress(result *Result, versionFile string) {
+func addWebRootWordPress(result *Result, root, versionFile string) {
+	core := filepath.Dir(filepath.Dir(versionFile))
+
+	// An auto-update leaves an extracted core in wp-content/upgrade and backup
+	// plugins leave whole copies beside it, so core reached through a content
+	// directory belongs to some other install and is not running anywhere.
+	if hasAncestor(root, core, "wp-content") {
+		return
+	}
+
 	version, ok := wordPressAt(versionFile)
 	if !ok {
 		return
 	}
 
+	// Must split exactly as the tree detector does. Sending the build as the
+	// version loses it entirely once the line is resolved against the catalog,
+	// and a line-only WordPress is reported as affected by every advisory fixed
+	// within that line, so a fully patched site would be shown as vulnerable.
+	line, build := wordPressLine(version)
 	result.Technologies = append(result.Technologies, Technology{
 		Name:     "WordPress",
-		Version:  version,
+		Version:  line,
+		Kernel:   build,
 		Category: "Framework",
 		Source:   SourceHostPrefix + versionFile,
 	})

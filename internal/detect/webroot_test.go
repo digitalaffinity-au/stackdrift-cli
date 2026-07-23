@@ -31,8 +31,8 @@ func TestWebRootFindsWordPressOutsideTheScannedDirectory(t *testing.T) {
 	scanWebRoots(result)
 
 	tech := onlyWordPress(t, result)
-	if tech.Version != "6.8.1" {
-		t.Fatalf("expected 6.8.1, got %q", tech.Version)
+	if tech.Version != "6.8" || tech.Kernel != "6.8.1" {
+		t.Fatalf("expected line 6.8 build 6.8.1, got %q / %q", tech.Version, tech.Kernel)
 	}
 	if !strings.Contains(tech.Source, "wp-includes/version.php") {
 		t.Fatalf("expected the source to name the install, got %q", tech.Source)
@@ -60,8 +60,9 @@ func TestWebRootFindsHostingPanelLayout(t *testing.T) {
 	result := &Result{}
 	searchWebRoot(result, server)
 
-	if onlyWordPress(t, result).Version != "6.7.2" {
-		t.Fatal("expected the vhost install to be found")
+	tech := onlyWordPress(t, result)
+	if tech.Version != "6.7" || tech.Kernel != "6.7.2" {
+		t.Fatalf("expected line 6.7 build 6.7.2, got %q / %q", tech.Version, tech.Kernel)
 	}
 }
 
@@ -110,7 +111,7 @@ func TestWebRootIgnoresBackupCopyUnderUploads(t *testing.T) {
 	result := &Result{}
 	searchWebRoot(result, server)
 
-	if onlyWordPress(t, result).Version != "6.8.1" {
+	if onlyWordPress(t, result).Kernel != "6.8.1" {
 		t.Fatal("a backup under uploads must not be reported")
 	}
 }
@@ -153,4 +154,75 @@ func onlyWordPress(t *testing.T, result *Result) Technology {
 		t.Fatalf("expected exactly one WordPress detection, got %d", len(found))
 	}
 	return found[0]
+}
+
+// The build is what makes a WordPress finding actionable: without it the server
+// scores the site against the base of its line and reports every advisory
+// already fixed in that line as affecting a fully patched install.
+func TestWebRootReportsTheExactBuildNotJustTheLine(t *testing.T) {
+	server := t.TempDir()
+	writeWordPress(t, server, filepath.Join("www", "html"), "6.8.3")
+
+	result := &Result{}
+	searchWebRoot(result, server)
+
+	tech := onlyWordPress(t, result)
+	if tech.Version != "6.8" {
+		t.Fatalf("expected the 6.8 line, got %q", tech.Version)
+	}
+	if tech.Kernel != "6.8.3" {
+		t.Fatalf("expected the 6.8.3 build, got %q", tech.Kernel)
+	}
+}
+
+// An auto-update leaves an extracted core under wp-content/upgrade. The tree
+// scanner has always ignored those; the web root search must agree or it invents
+// an install that is not running anywhere.
+func TestWebRootIgnoresCoreUnderWpContent(t *testing.T) {
+	server := t.TempDir()
+	writeWordPress(t, server, filepath.Join("www", "html"), "6.8.3")
+	writeWordPress(t, server, filepath.Join("www", "html", "wp-content", "upgrade", "wordpress"), "5.2.0")
+
+	result := &Result{}
+	searchWebRoot(result, server)
+
+	if onlyWordPress(t, result).Kernel != "6.8.3" {
+		t.Fatal("core under wp-content is not a running install")
+	}
+}
+
+// The same install reached both ways must land on ONE row, because two rows
+// sharing a name and version also share a tracking key: unticking either would
+// delete the technology the other still represents.
+func TestSameInstallFoundBothWaysCollapsesToOneRow(t *testing.T) {
+	tree := []Technology{{Name: "WordPress", Version: "6.8", Kernel: "6.8.3", Source: "wp-includes/version.php"}}
+	web := []Technology{{Name: "WordPress", Version: "6.8", Kernel: "6.8.3", Source: SourceHostPrefix + "/var/www/html/wp-includes/version.php"}}
+
+	merged := dedupeTechnologies(append(tree, web...))
+
+	if len(merged) != 1 {
+		t.Fatalf("expected one row, got %d: %+v", len(merged), merged)
+	}
+	if IsHostSource(merged[0].Source) {
+		t.Fatal("the scanned directory detection must win")
+	}
+}
+
+// Whichever detection knows the build wins, so a Dockerfile naming the host's
+// own release cannot shadow /etc/os-release and drop the running kernel.
+func TestDedupeKeepsTheBuildFromWhicheverDetectionHasIt(t *testing.T) {
+	merged := dedupeTechnologies([]Technology{
+		{Name: "Ubuntu", Version: "24.04", Source: "Dockerfile"},
+		{Name: "Ubuntu", Version: "24.04", Kernel: "6.8.0-60", Source: SourceOsRelease},
+	})
+
+	if len(merged) != 1 {
+		t.Fatalf("expected one row, got %d", len(merged))
+	}
+	if merged[0].Source != "Dockerfile" {
+		t.Fatalf("the tree detection must still win the source, got %q", merged[0].Source)
+	}
+	if merged[0].Kernel != "6.8.0-60" {
+		t.Fatalf("the running kernel must survive, got %q", merged[0].Kernel)
+	}
 }

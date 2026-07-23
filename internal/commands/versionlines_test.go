@@ -1,6 +1,12 @@
 package commands
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+
+	"github.com/digitalaffinity-au/stackdrift-cli/internal/config"
+	"github.com/digitalaffinity-au/stackdrift-cli/internal/detect"
+)
 
 func TestMatchVersionLine(t *testing.T) {
 	// Laravel is the case that forced this: its lines are major only for current
@@ -53,5 +59,55 @@ func TestMatchVersionLineDoesNotMatchOnDigitsAlone(t *testing.T) {
 
 	if got := matchVersionLine("6.12.4", known); got != "" {
 		t.Fatalf("6.1 is not the line for 6.12.4, got %q", got)
+	}
+}
+
+// A project linked by an older CLI holds the unresolved version, so the tracked
+// side has to be resolved too. Without this the technology reads as untracked,
+// shows unticked on a re-scan, and adding it back creates a second row for the
+// same thing, because the server has no duplicate guard.
+func TestResolveVersionLinesMigratesTheTrackedSide(t *testing.T) {
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`["13","12","11","10","5.8"]`))
+	})
+
+	result := &detect.Result{Technologies: []detect.Technology{
+		{Name: "Laravel", Version: "11.0", Source: "composer.json"},
+	}}
+	tracked := []config.TrackedTechnology{{ID: 5, Name: "Laravel", Version: "11.0"}}
+
+	resolveVersionLines(client, result, tracked)
+
+	if result.Technologies[0].Version != "11" {
+		t.Fatalf("expected the detected version resolved to 11, got %q", result.Technologies[0].Version)
+	}
+	if tracked[0].Version != "11" {
+		t.Fatalf("expected the tracked version migrated to 11, got %q", tracked[0].Version)
+	}
+	if tracked[0].ID != 5 {
+		t.Fatalf("the server id must survive so removal still addresses the right row, got %d", tracked[0].ID)
+	}
+	if techKey(result.Technologies[0].Name, result.Technologies[0].Version) != techKey(tracked[0].Name, tracked[0].Version) {
+		t.Fatal("detected and tracked must share a key or the technology reads as untracked")
+	}
+}
+
+// Two constraints under one major become the same row only after resolution, so
+// the merge has to happen after it. Two rows sharing a key would let unticking
+// one delete the technology the other represents.
+func TestResolveVersionLinesMergesRowsThatBecomeIdentical(t *testing.T) {
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`["13","12","11"]`))
+	})
+
+	result := &detect.Result{Technologies: []detect.Technology{
+		{Name: "Laravel", Version: "11.0", Source: "api/composer.json"},
+		{Name: "Laravel", Version: "11.31", Source: "admin/composer.json"},
+	}}
+
+	resolveVersionLines(client, result, nil)
+
+	if len(result.Technologies) != 1 {
+		t.Fatalf("expected one Laravel row after resolution, got %d: %+v", len(result.Technologies), result.Technologies)
 	}
 }
