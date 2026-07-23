@@ -3,6 +3,7 @@ package detect
 type Technology struct {
 	Name     string
 	Version  string
+	Kernel   string
 	Category string
 	Source   string
 }

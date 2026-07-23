@@ -11,6 +11,7 @@ type Technology struct {
 	ID       int    `json:"id"`
 	Name     string `json:"name"`
 	Version  string `json:"version"`
+	Kernel   string `json:"kernel"`
 	Category string `json:"category"`
 }
 
@@ -34,7 +35,12 @@ type Suggestion struct {
 type AddTechnologyRequest struct {
 	Name     string `json:"name"`
 	Version  string `json:"version,omitempty"`
+	Kernel   string `json:"kernel,omitempty"`
 	Category string `json:"category"`
+}
+
+type UpdateKernelRequest struct {
+	Kernel string `json:"kernel"`
 }
 
 type ManifestFile struct {

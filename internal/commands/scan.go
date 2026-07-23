@@ -83,6 +83,9 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 	if err := applyTechnologies(client, project.ID, result.Technologies, chosenTechs, cfg, saveConfig); err != nil {
 		return err
 	}
+	if err := applyKernels(client, result.Technologies, chosenTechs, cfg, saveConfig); err != nil {
+		return err
+	}
 	if err := applyManifests(client, project.ID, dir, primaries, result.Manifests, chosenManifests, cfg, saveConfig); err != nil {
 		return err
 	}

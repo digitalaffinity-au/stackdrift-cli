@@ -74,6 +74,11 @@ func (c *Client) AddTechnology(projectID int, req AddTechnologyRequest) (*Projec
 	return &project, nil
 }
 
+func (c *Client) SetKernel(technologyID int, kernel string) error {
+	path := fmt.Sprintf("/api/technologies/%d/kernel", technologyID)
+	return c.do(http.MethodPut, path, UpdateKernelRequest{Kernel: kernel}, nil)
+}
+
 func (c *Client) DeleteTechnology(id int) error {
 	return c.do(http.MethodDelete, fmt.Sprintf("/api/technologies/%d", id), nil, nil)
 }

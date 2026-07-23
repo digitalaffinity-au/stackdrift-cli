@@ -34,6 +34,60 @@ func scanHost(result *Result) {
 
 	detectOsRelease(result, "/etc/os-release")
 	detectKernel(result)
+	attachRunningKernel(result, runningKernel())
+}
+
+// attachRunningKernel records the build the machine is actually booted into on
+// the distribution entry, which is where StackDrift tracks a distro kernel: the
+// distribution services it, so its line and build belong to that release rather
+// than to upstream. The distro entry is the only one that gets it, since
+// upstream point releases and a distribution's ABI counter are different
+// numbers that happen to look alike.
+func attachRunningKernel(result *Result, build string) {
+	if build == "" {
+		return
+	}
+	for i := range result.Technologies {
+		if result.Technologies[i].Source == SourceOsRelease {
+			result.Technologies[i].Kernel = build
+		}
+	}
+}
+
+func runningKernel() string {
+	data, err := os.ReadFile("/proc/sys/kernel/osrelease")
+	if err != nil {
+		return ""
+	}
+	return KernelCore(strings.TrimSpace(string(data)))
+}
+
+// KernelCore reduces a uname release to the version and ABI counter the server
+// compares on, so "6.8.0-136-generic" and the archive's "6.8.0-136.136" agree.
+// A release with no numeric ABI part, such as Debian's "6.12.94+deb13-amd64",
+// keeps only the version.
+func KernelCore(release string) string {
+	if release == "" {
+		return ""
+	}
+	parts := strings.Split(release, "-")
+	if len(parts) < 2 {
+		return parts[0]
+	}
+	abi := leadingDigits(parts[1])
+	if abi == "" {
+		return parts[0]
+	}
+	return parts[0] + "-" + abi
+}
+
+func leadingDigits(value string) string {
+	for i, r := range value {
+		if r < '0' || r > '9' {
+			return value[:i]
+		}
+	}
+	return value
 }
 
 func detectOsRelease(result *Result, path string) {

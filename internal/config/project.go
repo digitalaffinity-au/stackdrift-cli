@@ -15,6 +15,7 @@ const ProjectFileName = ".stackdrift"
 type TrackedTechnology struct {
 	Name     string `json:"name"`
 	Version  string `json:"version,omitempty"`
+	Kernel   string `json:"kernel,omitempty"`
 	Category string `json:"category"`
 	ID       int    `json:"id,omitempty"`
 }

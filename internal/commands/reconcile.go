@@ -29,6 +29,7 @@ func trackedFromServer(technologies []api.Technology) []config.TrackedTechnology
 			ID:       t.ID,
 			Name:     t.Name,
 			Version:  t.Version,
+			Kernel:   t.Kernel,
 			Category: t.Category,
 		})
 	}

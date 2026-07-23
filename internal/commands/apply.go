@@ -89,6 +89,7 @@ func applyTechnologies(client *api.Client, projectID int, detected []detect.Tech
 		_, err := client.AddTechnology(projectID, api.AddTechnologyRequest{
 			Name:     t.Name,
 			Version:  t.Version,
+			Kernel:   t.Kernel,
 			Category: t.Category,
 		})
 		if err != nil {
@@ -98,6 +99,7 @@ func applyTechnologies(client *api.Client, projectID int, detected []detect.Tech
 		cfg.Technologies = append(cfg.Technologies, config.TrackedTechnology{
 			Name:     t.Name,
 			Version:  t.Version,
+			Kernel:   t.Kernel,
 			Category: t.Category,
 		})
 		tracked[techKey(t.Name, t.Version)] = true
@@ -105,6 +107,48 @@ func applyTechnologies(client *api.Client, projectID int, detected []detect.Tech
 			return err
 		}
 		ui.Println("  added technology: " + label(t.Name, t.Version))
+	}
+	return nil
+}
+
+// applyKernels records the running kernel build on a distribution entry the
+// project already holds. One added by this run carried its kernel in the add
+// request, so only the entries applyTechnologies skipped are left to update,
+// which is the case where the distribution was added from the website.
+func applyKernels(client *api.Client, detected []detect.Technology, chosen []ui.Item, cfg *config.ProjectConfig, save func() error) error {
+	index := make(map[string]int, len(cfg.Technologies))
+	for i, t := range cfg.Technologies {
+		index[techKey(t.Name, t.Version)] = i
+	}
+
+	for i, item := range chosen {
+		if !item.Selected || i >= len(detected) {
+			continue
+		}
+		t := detected[i]
+		if t.Kernel == "" {
+			continue
+		}
+
+		at, ok := index[techKey(t.Name, t.Version)]
+		if !ok {
+			continue
+		}
+		// A technology added moments ago has no server id recorded yet, and
+		// does not need one: its kernel went out with the add.
+		if cfg.Technologies[at].ID == 0 || cfg.Technologies[at].Kernel == t.Kernel {
+			continue
+		}
+
+		if err := client.SetKernel(cfg.Technologies[at].ID, t.Kernel); err != nil {
+			return err
+		}
+
+		cfg.Technologies[at].Kernel = t.Kernel
+		if err := save(); err != nil {
+			return err
+		}
+		ui.Println("  set kernel on " + label(t.Name, t.Version) + ": " + t.Kernel)
 	}
 	return nil
 }
