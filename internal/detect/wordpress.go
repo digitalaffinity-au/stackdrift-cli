@@ -40,10 +40,12 @@ func detectWordPress(result *Result, root, path string) {
 
 // version.php reports the exact build, but StackDrift tracks WordPress the way
 // it tracks a distribution: the release line carries the support dates, and the
-// build says which point release is installed. Sending 7.0.2 as the version
-// matches no release line, so the line is derived and the full version is kept
-// as the build. A version already at line granularity is its own build, which
-// is what the catalog lists for an unpatched release.
+// build says which point release is installed.
+//
+// The line here is a starting point that the scan then resolves against the
+// catalog, which is the only thing that knows the real granularity. Guessing
+// major.minor is right for WordPress today and harmless when it is not, because
+// resolution corrects it. The build is the part only this file can supply.
 func wordPressLine(version string) (line, build string) {
 	parts := strings.Split(version, ".")
 	if len(parts) < 2 {

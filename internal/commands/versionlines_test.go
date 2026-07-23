@@ -1,0 +1,57 @@
+package commands
+
+import "testing"
+
+func TestMatchVersionLine(t *testing.T) {
+	// Laravel is the case that forced this: its lines are major only for current
+	// releases but major.minor for the old 5.x era, so no fixed rule works.
+	laravel := []string{"13", "12", "11", "10", "9", "8", "7", "6", "5.8", "5.5"}
+	wordpress := []string{"7.0", "6.9", "6.8"}
+	dotnet := []string{"10.0", "9.0", "8.0"}
+	kernel := []string{"7.1", "7.0", "6.6", "6.12", "5.15", "5.10"}
+
+	cases := []struct {
+		name     string
+		version  string
+		known    []string
+		expected string
+	}{
+		{"laravel constraint resolves to the major line", "11.0", laravel, "11"},
+		{"laravel pinned build resolves to the major line", "11.5.2", laravel, "11"},
+		{"laravel old era keeps its major.minor line", "5.8.38", laravel, "5.8"},
+		{"laravel exact line is left alone", "11", laravel, "11"},
+		{"wordpress build resolves to major.minor", "7.0.2", wordpress, "7.0"},
+		{"wordpress exact line is left alone", "7.0", wordpress, "7.0"},
+		{"dotnet target framework is already a line", "8.0", dotnet, "8.0"},
+		{"kernel line is left alone", "6.12", kernel, "6.12"},
+		// A release the catalog no longer tracks must not be forced onto a
+		// neighbouring line, because being on it is the point.
+		{"unknown version is left alone", "5.19", kernel, ""},
+		{"no known versions leaves the version alone", "7.0.2", nil, ""},
+	}
+
+	for _, c := range cases {
+		if got := matchVersionLine(c.version, c.known); got != c.expected {
+			t.Errorf("%s: expected %q, got %q", c.name, c.expected, got)
+		}
+	}
+}
+
+// The longest match wins, so a version is never attached to a shorter line that
+// happens to also be a prefix.
+func TestMatchVersionLinePrefersTheLongestLine(t *testing.T) {
+	known := []string{"6", "6.8"}
+
+	if got := matchVersionLine("6.8.3", known); got != "6.8" {
+		t.Fatalf("expected 6.8, got %q", got)
+	}
+}
+
+// A shorter line must not swallow a different one: 6.1 is not the line for 6.12.
+func TestMatchVersionLineDoesNotMatchOnDigitsAlone(t *testing.T) {
+	known := []string{"6.1"}
+
+	if got := matchVersionLine("6.12.4", known); got != "" {
+		t.Fatalf("6.1 is not the line for 6.12.4, got %q", got)
+	}
+}

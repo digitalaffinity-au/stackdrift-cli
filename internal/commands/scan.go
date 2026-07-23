@@ -49,6 +49,11 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 		return nil
 	}
 
+	// Detection reports what the files say, which is not always the granularity
+	// the catalog tracks releases at, so the line is settled before anything is
+	// shown or sent.
+	resolveVersionLines(client, result)
+
 	cfg := configFor(project, existing)
 
 	// The project can be edited on the website between scans, so what the

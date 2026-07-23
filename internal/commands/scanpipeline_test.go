@@ -357,3 +357,62 @@ func TestApplyManifests_EmptyPrimaryButUsableLock_StillTracksTheGroup(t *testing
 		t.Fatalf("expected the group tracked, got %+v", cfg.DependencyGrp)
 	}
 }
+
+// Laravel is the case the catalog lookup exists for: composer.json names a
+// constraint like ^11.0, while the catalog tracks the line as 11, so the version
+// sent has to come from the catalog rather than from the file.
+func TestScan_WithYes_SendsTheCatalogLineForLaravel(t *testing.T) {
+	var added []api.AddTechnologyRequest
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/technologies/versions") {
+			_, _ = w.Write([]byte(`["13","12","11","10","5.8"]`))
+			return
+		}
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/technologies") {
+			var req api.AddTechnologyRequest
+			_ = decodeJSON(r, &req)
+			added = append(added, req)
+		}
+		_, _ = w.Write([]byte(`{"id":7,"name":"Demo","technologies":[]}`))
+	})
+
+	dir := linkedDir(t, 7)
+	writeFile(t, dir, "composer.json", `{"require":{"laravel/framework":"^11.0"}}`)
+
+	if err := scan(client, dir, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(added) != 1 || added[0].Name != "Laravel" || added[0].Version != "11" {
+		t.Fatalf("expected Laravel line 11 added, got %+v", added)
+	}
+}
+
+// A version the catalog no longer lists must survive untouched, because running
+// an untracked release is exactly what the project should show.
+func TestScan_WithYes_LeavesAnUnknownVersionAlone(t *testing.T) {
+	var added []api.AddTechnologyRequest
+	client := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/technologies/versions") {
+			_, _ = w.Write([]byte(`["13","12"]`))
+			return
+		}
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/technologies") {
+			var req api.AddTechnologyRequest
+			_ = decodeJSON(r, &req)
+			added = append(added, req)
+		}
+		_, _ = w.Write([]byte(`{"id":7,"name":"Demo","technologies":[]}`))
+	})
+
+	dir := linkedDir(t, 7)
+	writeFile(t, dir, "composer.json", `{"require":{"laravel/framework":"^9.0"}}`)
+
+	if err := scan(client, dir, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(added) != 1 || added[0].Version != "9.0" {
+		t.Fatalf("expected the detected 9.0 to be left alone, got %+v", added)
+	}
+}
