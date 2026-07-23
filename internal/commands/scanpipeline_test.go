@@ -204,8 +204,10 @@ func TestScan_WithYes_AddsDetectedProjectTechnologies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(added) != 1 || added[0].Name != "WordPress" || added[0].Version != "6.8.3" {
-		t.Fatalf("expected WordPress 6.8.3 added, got %+v", added)
+	// The release line goes out as the version and the exact build alongside it,
+	// so the server records the same shape a distribution uses.
+	if len(added) != 1 || added[0].Name != "WordPress" || added[0].Version != "6.8" || added[0].Kernel != "6.8.3" {
+		t.Fatalf("expected WordPress line 6.8 build 6.8.3 added, got %+v", added)
 	}
 }
 

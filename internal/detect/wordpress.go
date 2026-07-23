@@ -28,12 +28,28 @@ func detectWordPress(result *Result, root, path string) {
 		return
 	}
 
+	line, build := wordPressLine(version)
 	result.Technologies = append(result.Technologies, Technology{
 		Name:     "WordPress",
-		Version:  version,
+		Version:  line,
+		Kernel:   build,
 		Category: "Framework",
 		Source:   wordPressSource(root, core),
 	})
+}
+
+// version.php reports the exact build, but StackDrift tracks WordPress the way
+// it tracks a distribution: the release line carries the support dates, and the
+// build says which point release is installed. Sending 7.0.2 as the version
+// matches no release line, so the line is derived and the full version is kept
+// as the build. A version already at line granularity is its own build, which
+// is what the catalog lists for an unpatched release.
+func wordPressLine(version string) (line, build string) {
+	parts := strings.Split(version, ".")
+	if len(parts) < 2 {
+		return version, version
+	}
+	return parts[0] + "." + parts[1], version
 }
 
 // wordPressAt reads the version out of a wp-includes/version.php, confirming
