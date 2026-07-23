@@ -35,7 +35,11 @@ func scan(client *api.Client, dir string, assumeYes bool) error {
 
 	ui.Println()
 	ui.Println("Scanning " + dir + " ...")
-	result, err := detect.Scan(dir)
+	// Walking the tree can take a while on a large directory, so say what is
+	// happening rather than leaving a silent pause that reads as a hang.
+	result, err := detect.ScanWithProgress(dir, func() {
+		ui.Println("Scanning for additional supported software ...")
+	})
 	if err != nil {
 		return err
 	}

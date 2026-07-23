@@ -52,13 +52,36 @@ var skipDirs = map[string]bool{
 }
 
 func Scan(root string) (*Result, error) {
-	result := &Result{}
+	return ScanWithProgress(root, nil)
+}
 
-	if err := scanTree(root, result); err != nil {
+// ScanWithProgress reads the host first because that part is instant, then calls
+// onHostDone before walking the tree, which is the slow part and the one that goes
+// looking for WordPress and the like. Without that hook the caller has nothing to
+// say while a large directory is being walked and the scan looks hung.
+//
+// Host detection runs first but its technologies are appended LAST, so a tree
+// detection still wins the dedupe exactly as it did when the walk ran first. That
+// matters because the source decides whether an entry defaults to selected: a
+// Dockerfile-declared Ubuntu must not turn into a host detection just because the
+// order of work changed.
+func ScanWithProgress(root string, onHostDone func()) (*Result, error) {
+	host := &Result{}
+	scanHost(host)
+
+	if onHostDone != nil {
+		onHostDone()
+	}
+
+	tree := &Result{}
+	if err := scanTree(root, tree); err != nil {
 		return nil, err
 	}
 
-	scanHost(result)
+	result := &Result{
+		Technologies: append(tree.Technologies, host.Technologies...),
+		Manifests:    tree.Manifests,
+	}
 
 	result.Technologies = dedupeTechnologies(result.Technologies)
 	return result, nil

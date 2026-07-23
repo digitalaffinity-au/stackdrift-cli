@@ -305,3 +305,57 @@ func TestScan_PackagesConfig_DetectedAsNuGetSupportingFile(t *testing.T) {
 		}
 	}
 }
+
+// Proves the callback fires before the walk: the manifest is only created from
+// inside the callback, so the walk could not have seen it unless it ran after.
+func TestScanWithProgressCallbackRunsBeforeTheTreeWalk(t *testing.T) {
+	dir := t.TempDir()
+
+	called := 0
+	result, err := ScanWithProgress(dir, func() {
+		called++
+		write(t, dir, "package.json", `{"name":"x"}`)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called != 1 {
+		t.Fatalf("expected the progress callback once, got %d", called)
+	}
+	if !hasManifest(result.Manifests, "package.json", "Npm") {
+		t.Fatal("the tree walk must run after the progress callback")
+	}
+}
+
+func TestScanWithoutProgressCallbackStillScans(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "package.json", `{"name":"x"}`)
+
+	result, err := ScanWithProgress(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasManifest(result.Manifests, "package.json", "Npm") {
+		t.Fatal("expected package.json npm")
+	}
+}
+
+// A technology found in the tree must keep winning over the same one detected on
+// the host, because the source decides whether it defaults to selected. Host
+// detection now runs first, so this guards the ordering that dedupe relies on.
+func TestScanPrefersTreeSourceOverHostForTheSameTechnology(t *testing.T) {
+	tree := []Technology{{Name: "Ubuntu", Version: "24.04", Source: "Dockerfile"}}
+	host := []Technology{{Name: "Ubuntu", Version: "24.04", Source: SourceOsRelease}}
+
+	merged := dedupeTechnologies(append(tree, host...))
+
+	if len(merged) != 1 {
+		t.Fatalf("expected one entry after dedupe, got %d", len(merged))
+	}
+	if merged[0].Source != "Dockerfile" {
+		t.Fatalf("expected the tree source to win, got %q", merged[0].Source)
+	}
+	if IsHostSource(merged[0].Source) {
+		t.Fatal("a tree detection must not be treated as a host detection")
+	}
+}
